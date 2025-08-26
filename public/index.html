@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nederlandse Fietsknooppunten Tracker</title>
+    
+    <!-- Leaflet CSS from local CDN -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚴‍♀️ Nederlandse Fietsknooppunten Tracker</h1>
+            <p>Echte OpenStreetMap knooppunten - Lokale Node.js versie</p>
+        </div>
+        
+        <div class="main-content">
+            <div class="sidebar">
+                <div class="stats">
+                    <div class="stat-grid">
+                        <div class="stat-card">
+                            <h3 id="totalKnooppunten">0</h3>
+                            <p>Bezocht</p>
+                        </div>
+                        <div class="stat-card">
+                            <h3 id="loadedCount">0</h3>
+                            <p>Op kaart</p>
+                        </div>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill" style="width: 0%">0%</div>
+                    </div>
+                </div>
+                
+                <div class="status-info" id="statusInfo">
+                    Initialiseren...
+                </div>
+                
+                <div class="route-builder">
+                    <h3>🗓️ Bezochte Knooppunten</h3>
+                    <div class="info-text">
+                        <p>💡 Klik direct op knooppunten op de kaart om ze als bezocht te markeren</p>
+                    </div>
+                    <button class="btn btn-info" onclick="exportVisited()">Export Bezochte</button>
+                    <button class="btn btn-danger" onclick="clearAllVisited()">Alles Wissen</button>
+                </div>
+            </div>
+            
+            <div class="map-container">
+                <div id="map"></div>
+                
+                <div class="controls">
+                    <div class="legend">
+                        <h4>Legenda:</h4>
+                        <div class="legend-item">
+                            <div class="legend-dot legend-normal"></div>
+                            <span>Knooppunt</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-dot legend-visited"></div>
+                            <span>Bezocht</span>
+                        </div>
+                    </div>
+                    <div class="control-buttons">
+                        <button onclick="refreshData()" class="btn-small">🔄 Refresh</button>
+                        <button onclick="fitToNodes()" class="btn-small">🎯 Fit View</button>
+                    </div>
+                </div>
+                
+                <div id="loading" class="loading">
+                    <div class="spinner"></div>
+                    <p>Laden van Nederlandse fietsknooppunten...</p>
+                    <small>Via lokale Node.js server</small>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Collapsible visited nodes bar at bottom -->
+        <div class="visited-bar collapsed" id="visitedBar">
+            <div class="visited-bar-header" onclick="toggleVisitedBar()">
+                <span id="visitedBarTitle">✅ Bezochte Knooppunten (0)</span>
+                <span class="visited-bar-toggle" id="visitedBarToggle">▲</span>
+            </div>
+            <div class="visited-bar-content" id="visitedBarContent">
+                <div id="visitedList">
+                    <div class="empty-visited">Nog geen knooppunten bezocht</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Leaflet JavaScript -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+    
+    <!-- Custom JavaScript -->
+    <script src="js/app.js"></script>
+</body>
+</html>
