@@ -1,17 +1,230 @@
 const express = require('express');
 const fs = require('fs').promises;
 const path = require('path');
+const { clusterNodesForBounds } = require('./clustering');
 const router = express.Router();
 
 // Configuration
 const DATA_DIR = path.join(__dirname, '..', 'data');
+const CHUNKS_DIR = path.join(DATA_DIR, 'chunks');
 const RAW_DATA_FILE = 'raw-nodes-data.json';
 const GEOJSON_FILE = 'nederlandse-fietsknooppunten-volledig.geojson';
+const CHUNK_INDEX_FILE = 'chunk-index.json';
+const ROUTE_CHUNK_INDEX_FILE = 'route-chunk-index.json';
 const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours for local data
 
 // In-memory cache
 let cyclingNodesCache = null;
 let cacheTimestamp = null;
+let chunkIndex = null;
+let routeChunkIndex = null;
+let chunkCache = new Map(); // Cache for individual chunks
+let routeChunkCache = new Map(); // Cache for route chunks
+
+/**
+ * Load chunk index
+ */
+async function loadChunkIndex() {
+    if (chunkIndex) return chunkIndex;
+    
+    try {
+        const indexPath = path.join(DATA_DIR, CHUNK_INDEX_FILE);
+        const indexData = await fs.readFile(indexPath, 'utf8');
+        chunkIndex = JSON.parse(indexData);
+        console.log(`📂 Loaded chunk index with ${chunkIndex.totalChunks} chunks`);
+        return chunkIndex;
+    } catch (error) {
+        console.log('📂 No chunk index found, falling back to legacy loading');
+        return null;
+    }
+}
+
+/**
+ * Load specific chunk by ID
+ */
+async function loadChunk(chunkId) {
+    try {
+        // Check cache first
+        if (chunkCache.has(chunkId)) {
+            return chunkCache.get(chunkId);
+        }
+        
+        const chunkPath = path.join(CHUNKS_DIR, `chunk-${chunkId}.json`);
+        const chunkData = await fs.readFile(chunkPath, 'utf8');
+        const chunk = JSON.parse(chunkData);
+        
+        // Cache the chunk
+        chunkCache.set(chunkId, chunk);
+        
+        console.log(`📂 Loaded chunk ${chunkId} with ${chunk.count} nodes`);
+        return chunk;
+    } catch (error) {
+        console.error(`❌ Failed to load chunk ${chunkId}:`, error.message);
+        return null;
+    }
+}
+
+/**
+ * Find chunks that intersect with given bounds
+ */
+function findIntersectingChunks(south, west, north, east) {
+    if (!chunkIndex) return [];
+    
+    const intersectingChunks = chunkIndex.chunks.filter(chunk => {
+        const [chunkSouth, chunkWest, chunkNorth, chunkEast] = chunk.bounds;
+        
+        // Check if bounding boxes intersect
+        return !(east < chunkWest || west > chunkEast || 
+                north < chunkSouth || south > chunkNorth);
+    });
+    
+    console.log(`🔍 Found ${intersectingChunks.length} intersecting chunks for bounds [${south}, ${west}, ${north}, ${east}]`);
+    return intersectingChunks;
+}
+
+/**
+ * Load nodes from chunks for given bounds
+ */
+async function loadNodesFromChunks(south, west, north, east) {
+    try {
+        await loadChunkIndex();
+        
+        if (!chunkIndex) {
+            // Fallback to legacy loading
+            return await filterNodesByBounds(south, west, north, east);
+        }
+        
+        const intersectingChunks = findIntersectingChunks(south, west, north, east);
+        const allNodes = [];
+        
+        for (const chunkInfo of intersectingChunks) {
+            const chunk = await loadChunk(chunkInfo.id);
+            if (chunk && chunk.nodes) {
+                // Filter nodes within the requested bounds
+                const filteredNodes = chunk.nodes.filter(node => {
+                    return node.lat >= south && node.lat <= north &&
+                           node.lng >= west && node.lng <= east;
+                });
+                allNodes.push(...filteredNodes);
+            }
+        }
+        
+        console.log(`📂 Loaded ${allNodes.length} nodes from ${intersectingChunks.length} chunks`);
+        return allNodes;
+        
+    } catch (error) {
+        console.error('❌ Error loading nodes from chunks:', error.message);
+        // Fallback to legacy loading
+        return await filterNodesByBounds(south, west, north, east);
+    }
+}
+
+/**
+ * Load route chunk index
+ */
+async function loadRouteChunkIndex() {
+    if (routeChunkIndex) return routeChunkIndex;
+    
+    try {
+        const indexPath = path.join(DATA_DIR, ROUTE_CHUNK_INDEX_FILE);
+        const indexData = await fs.readFile(indexPath, 'utf8');
+        routeChunkIndex = JSON.parse(indexData);
+        console.log(`🛣️ Loaded route chunk index with ${routeChunkIndex.totalChunks} chunks`);
+        return routeChunkIndex;
+    } catch (error) {
+        console.log('🛣️ No route chunk index found');
+        return null;
+    }
+}
+
+/**
+ * Load specific route chunk by ID
+ */
+async function loadRouteChunk(chunkId) {
+    try {
+        // Check cache first
+        if (routeChunkCache.has(chunkId)) {
+            return routeChunkCache.get(chunkId);
+        }
+        
+        const chunkPath = path.join(CHUNKS_DIR, `routes-chunk-${chunkId}.json`);
+        const chunkData = await fs.readFile(chunkPath, 'utf8');
+        const chunk = JSON.parse(chunkData);
+        
+        // Cache the chunk
+        routeChunkCache.set(chunkId, chunk);
+        console.log(`📂 Loaded route chunk ${chunkId} with ${chunk.routes ? chunk.routes.length : 0} routes`);
+        
+        return chunk;
+    } catch (error) {
+        console.error(`❌ Error loading route chunk ${chunkId}:`, error.message);
+        return null;
+    }
+}
+
+/**
+ * Find intersecting route chunks for given bounds
+ */
+function findIntersectingRouteChunks(south, west, north, east) {
+    if (!routeChunkIndex) return [];
+    
+    return routeChunkIndex.chunks.filter(chunk => {
+        const [chunkSouth, chunkWest, chunkNorth, chunkEast] = chunk.bounds;
+        
+        // Check if bounding boxes intersect
+        return !(east < chunkWest || west > chunkEast || 
+                north < chunkSouth || south > chunkNorth);
+    });
+}
+
+/**
+ * Load routes from chunks for given bounds
+ */
+async function loadRoutesFromChunks(south, west, north, east, zoom = 11) {
+    try {
+        await loadRouteChunkIndex();
+        
+        if (!routeChunkIndex) {
+            console.log('🛣️ No route chunks available');
+            return [];
+        }
+        
+        // Only load routes when not clustering (zoom 11+)
+        if (zoom < 11) {
+            console.log(`🛣️ Zoom level ${zoom} too low for route display, skipping routes`);
+            return [];
+        }
+        
+        const intersectingChunks = findIntersectingRouteChunks(south, west, north, east);
+        const allRoutes = [];
+        
+        console.log(`🔍 Found ${intersectingChunks.length} intersecting route chunks for bounds [${south}, ${west}, ${north}, ${east}]`);
+        
+        for (const chunkInfo of intersectingChunks) {
+            const chunk = await loadRouteChunk(chunkInfo.id);
+            if (chunk && chunk.routes) {
+                // Filter routes that have geometry within the requested bounds
+                const filteredRoutes = chunk.routes.filter(route => {
+                    if (!route.geometry || route.geometry.length === 0) return false;
+                    
+                    // Check if any point of the route is within bounds
+                    return route.geometry.some(point => {
+                        return point.lat >= south && point.lat <= north &&
+                               point.lng >= west && point.lng <= east;
+                    });
+                });
+                allRoutes.push(...filteredRoutes);
+            }
+        }
+        
+        console.log(`📂 Loaded ${allRoutes.length} routes from ${intersectingChunks.length} chunks`);
+        return allRoutes;
+        
+    } catch (error) {
+        console.error('❌ Error loading routes from chunks:', error.message);
+        return [];
+    }
+}
 
 /**
  * Load nodes from local files (raw JSON or GeoJSON)
@@ -172,19 +385,67 @@ router.get('/cycling-nodes/bounds/:south/:west/:north/:east', async (req, res) =
         
         console.log(`📍 Loading nodes for bounds: ${south},${west},${north},${east}`);
         
-        const nodes = await filterNodesByBounds(bounds.south, bounds.west, bounds.north, bounds.east);
+        const nodes = await loadNodesFromChunks(bounds.south, bounds.west, bounds.north, bounds.east);
         
         res.json({
             bounds: bounds,
             nodes: nodes,
             count: nodes.length,
-            source: 'Local data file (filtered by bounds)'
+            source: chunkIndex ? 'Chunk-based loading' : 'Local data file (filtered by bounds)'
         });
         
     } catch (error) {
         console.error('❌ Error in bounds endpoint:', error.message);
         res.status(500).json({
             error: 'Failed to load nodes for bounds',
+            message: error.message
+        });
+    }
+});
+
+/**
+ * Get clustered cycling nodes within map bounds (RECOMMENDED)
+ */
+router.get('/cycling-nodes/clustered/:south/:west/:north/:east', async (req, res) => {
+    try {
+        const { south, west, north, east } = req.params;
+        const zoom = req.query.zoom ? parseInt(req.query.zoom) : null;
+        
+        // Validate bounds
+        const bounds = {
+            south: parseFloat(south),
+            west: parseFloat(west),
+            north: parseFloat(north),
+            east: parseFloat(east)
+        };
+        
+        if (Object.values(bounds).some(val => isNaN(val))) {
+            return res.status(400).json({ 
+                error: 'Invalid bounds parameters' 
+            });
+        }
+        
+        console.log(`📍 Loading clustered nodes for bounds: ${south},${west},${north},${east} (zoom: ${zoom || 'auto'})`);
+        
+        const nodes = await loadNodesFromChunks(bounds.south, bounds.west, bounds.north, bounds.east);
+        const clusteredData = clusterNodesForBounds(nodes, bounds.south, bounds.west, bounds.north, bounds.east, zoom);
+        
+        res.json({
+            bounds: bounds,
+            clusters: clusteredData.clusters,
+            count: clusteredData.clusters.length,
+            zoom: clusteredData.zoom,
+            clusterDistance: clusteredData.clusterDistance,
+            originalNodeCount: clusteredData.originalNodeCount,
+            clusterCount: clusteredData.clusterCount,
+            individualNodeCount: clusteredData.individualNodeCount,
+            source: chunkIndex ? 'Chunk-based clustering' : 'Local data clustering'
+        });
+        
+    } catch (error) {
+        console.error('❌ Error in clustered bounds endpoint:', error.message);
+        res.status(500).json({
+            error: 'Failed to load clustered nodes for bounds',
             message: error.message
         });
     }
@@ -214,16 +475,15 @@ router.get('/cycling-nodes/bounds-chunked/:south/:west/:north/:east', async (req
         
         console.log(`📍 Chunked loading nodes for bounds: ${south},${west},${north},${east}`);
         
-        // For local data, we don't need actual chunking since filtering is fast
-        const nodes = await filterNodesByBounds(bounds.south, bounds.west, bounds.north, bounds.east);
+        const nodes = await loadNodesFromChunks(bounds.south, bounds.west, bounds.north, bounds.east);
         
         res.json({
             bounds: bounds,
             nodes: nodes,
             count: nodes.length,
-            chunks: 1, // Simulate single chunk for compatibility
+            chunks: chunkIndex ? findIntersectingChunks(bounds.south, bounds.west, bounds.north, bounds.east).length : 1,
             totalNodesBeforeDedup: nodes.length,
-            source: 'Local data file (chunked endpoint - no actual chunking needed)'
+            source: chunkIndex ? 'Chunk-based loading (chunked endpoint)' : 'Local data file (chunked endpoint - no actual chunking needed)'
         });
         
     } catch (error) {
@@ -236,60 +496,35 @@ router.get('/cycling-nodes/bounds-chunked/:south/:west/:north/:east', async (req
 });
 
 /**
- * Get cycling nodes for a specific region (filtered from local data)
+ * Get cycling routes for given bounds (chunked loading)
  */
-router.get('/cycling-nodes/:region', async (req, res) => {
-    const region = req.params.region.toLowerCase();
-    
-    // Define regional bounding boxes for the Netherlands
-    const regions = {
-        'noord-holland': [52.2, 4.5, 52.6, 5.2],
-        'zuid-holland': [51.8, 4.0, 52.2, 4.7],
-        'utrecht': [51.9, 4.9, 52.2, 5.4],
-        'gelderland': [51.7, 5.4, 52.5, 6.8],
-        'noord-brabant': [51.3, 4.7, 51.8, 5.9],
-        'limburg': [50.7, 5.7, 51.5, 6.2],
-        'zeeland': [51.2, 3.2, 51.7, 4.2],
-        'friesland': [52.8, 5.4, 53.5, 6.2],
-        'groningen': [53.0, 6.2, 53.5, 7.2],
-        'drenthe': [52.5, 6.2, 53.2, 7.0],
-        'overijssel': [52.0, 6.0, 52.8, 6.9],
-        'flevoland': [52.3, 5.2, 52.6, 5.8]
-    };
-
-    const bbox = regions[region];
-    if (!bbox) {
-        return res.status(400).json({ 
-            error: 'Unknown region', 
-            available: Object.keys(regions) 
-        });
-    }
-
+router.get('/cycling-routes/bounds/:south/:west/:north/:east', async (req, res) => {
     try {
-        console.log(`📍 Loading nodes for region: ${region}`);
+        const bounds = {
+            south: parseFloat(req.params.south),
+            west: parseFloat(req.params.west),
+            north: parseFloat(req.params.north),
+            east: parseFloat(req.params.east)
+        };
         
-        // Filter local data by region bounds
-        const nodes = await filterNodesByBounds(bbox[0], bbox[1], bbox[2], bbox[3]);
+        const zoom = parseInt(req.query.zoom) || 11;
         
-        // Add region info to nodes
-        const regionalNodes = nodes.map(node => ({
-            ...node,
-            region: region
-        }));
-
+        console.log(`🛣️ Loading routes for bounds: ${bounds.south},${bounds.west},${bounds.north},${bounds.east} (zoom: ${zoom})`);
+        
+        const routes = await loadRoutesFromChunks(bounds.south, bounds.west, bounds.north, bounds.east, zoom);
+        
         res.json({
-            region: region,
-            nodes: regionalNodes,
-            count: regionalNodes.length,
-            bbox: bbox,
-            source: 'Local data file (filtered by region)'
+            bounds: bounds,
+            routes: routes,
+            count: routes.length,
+            zoom: zoom,
+            source: 'Local route chunks'
         });
 
     } catch (error) {
-        console.error(`❌ Error fetching nodes for ${region}:`, error.message);
+        console.error('❌ Error fetching routes:', error.message);
         res.status(500).json({
-            error: 'Failed to fetch regional nodes',
-            region: region,
+            error: 'Failed to fetch routes',
             message: error.message
         });
     }
@@ -316,27 +551,5 @@ router.get('/cache/status', (req, res) => {
         lastUpdated: cyclingNodesCache ? cyclingNodesCache.lastUpdated : null
     });
 });
-
-/**
- * Fallback nodes for when API is unavailable
- */
-function getFallbackNodes() {
-    return {
-        nodes: [
-            {id: 12, lat: 52.0907, lng: 5.1214, name: "Knooppunt 12", osmId: null},
-            {id: 15, lat: 52.0845, lng: 5.1456, name: "Knooppunt 15", osmId: null},
-            {id: 23, lat: 52.0756, lng: 5.1623, name: "Knooppunt 23", osmId: null},
-            {id: 34, lat: 52.0623, lng: 5.1789, name: "Knooppunt 34", osmId: null},
-            {id: 45, lat: 52.0534, lng: 5.1967, name: "Knooppunt 45", osmId: null},
-            {id: 67, lat: 52.3702, lng: 4.8952, name: "Knooppunt 67", osmId: null},
-            {id: 78, lat: 52.1590, lng: 4.4970, name: "Knooppunt 78", osmId: null},
-            {id: 89, lat: 51.8423, lng: 4.6081, name: "Knooppunt 89", osmId: null},
-            {id: 91, lat: 51.6978, lng: 5.3037, name: "Knooppunt 91", osmId: null}
-        ],
-        count: 9,
-        source: 'Fallback data',
-        warning: 'Limited demo dataset - API unavailable'
-    };
-}
 
 module.exports = router;

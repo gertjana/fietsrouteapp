@@ -5,9 +5,9 @@ const fs = require('fs').promises;
 const path = require('path');
 
 /**
- * Download all Dutch cycling nodes with rate limiting
- * This script downloads all fietsknooppunten from the Netherlands in chunks
- * to respect Overpass API rate limits and avoid timeouts
+ * Download Dutch cycling nodes with rcn_ref with rate limiting
+ * This script downloads all fietsknooppunten with rcn_ref tag regardless of network
+ * in chunks to respect Overpass API rate limits and avoid timeouts
  */
 
 // Configuration
@@ -25,6 +25,7 @@ const CONFIG = {
     
     // File paths
     OUTPUT_DIR: './data',
+    CHUNKS_DIR: './data/chunks',
     GEOJSON_FILE: 'nederlandse-fietsknooppunten-volledig.geojson',
     RAW_DATA_FILE: 'raw-nodes-data.json',
     LOG_FILE: 'download.log'
@@ -62,14 +63,15 @@ function log(message, level = 'INFO') {
 }
 
 /**
- * Create output directory
+ * Create output directories
  */
 async function ensureOutputDir() {
     try {
         await fs.mkdir(CONFIG.OUTPUT_DIR, { recursive: true });
-        log(`Created output directory: ${CONFIG.OUTPUT_DIR}`);
+        await fs.mkdir(CONFIG.CHUNKS_DIR, { recursive: true });
+        log(`Created output directories: ${CONFIG.OUTPUT_DIR} and ${CONFIG.CHUNKS_DIR}`);
     } catch (error) {
-        log(`Failed to create output directory: ${error.message}`, 'ERROR');
+        log(`Failed to create output directories: ${error.message}`, 'ERROR');
         throw error;
     }
 }
@@ -113,8 +115,7 @@ async function fetchChunkWithRetry(chunk, retryCount = 0) {
     const overpassQuery = `
         [out:json][timeout:30][maxsize:536870912];
         (
-            node["rcn_ref"]["network"="rcn"](${south},${west},${north},${east});
-            node["rcn_ref"]["network:type"="node_network"](${south},${west},${north},${east});
+            node["rcn_ref"](${south},${west},${north},${east});
         );
         out geom;
     `;
@@ -165,6 +166,9 @@ async function fetchChunkWithRetry(chunk, retryCount = 0) {
         stats.nodesTotal += nodes.length;
         stats.chunksCompleted++;
         
+        // Save individual chunk
+        await saveChunk(chunk, nodes);
+        
         log(`✅ ${chunk.name}: Found ${nodes.length} nodes (Total: ${stats.nodesTotal})`);
         return nodes;
 
@@ -189,6 +193,30 @@ async function fetchChunkWithRetry(chunk, retryCount = 0) {
 
         log(`❌ Failed ${chunk.name} after ${retryCount + 1} attempts: ${error.message}`, 'ERROR');
         return []; // Return empty array to continue with other chunks
+    }
+}
+
+/**
+ * Save individual chunk data
+ */
+async function saveChunk(chunk, nodes) {
+    try {
+        const chunkData = {
+            id: chunk.id,
+            name: chunk.name,
+            bounds: chunk.bounds,
+            nodes: nodes,
+            count: nodes.length,
+            downloadDate: new Date().toISOString()
+        };
+        
+        const chunkPath = path.join(CONFIG.CHUNKS_DIR, `chunk-${chunk.id}.json`);
+        await fs.writeFile(chunkPath, JSON.stringify(chunkData, null, 2));
+        
+        log(`💾 Saved chunk ${chunk.id}: ${nodes.length} nodes to ${chunkPath}`);
+    } catch (error) {
+        log(`❌ Failed to save chunk ${chunk.id}: ${error.message}`, 'ERROR');
+        // Don't throw - this shouldn't stop the download process
     }
 }
 
@@ -218,7 +246,7 @@ function createGeoJSON(nodes) {
         type: "FeatureCollection",
         metadata: {
             title: "Nederlandse Fietsknooppunten - Volledige Dataset",
-            description: "Alle fietsknooppunten van Nederland uit OpenStreetMap",
+            description: "Alle fietsknooppunten met rcn_ref van Nederland uit OpenStreetMap",
             downloadDate: new Date().toISOString(),
             totalFeatures: nodes.length,
             source: "OpenStreetMap via Overpass API",
@@ -279,8 +307,56 @@ async function saveData(nodes) {
         await fs.writeFile(statsPath, JSON.stringify(stats, null, 2));
         log(`✅ Saved statistics: ${statsPath}`);
         
+        // Create chunk index
+        await createChunkIndex();
+        
     } catch (error) {
         log(`❌ Failed to save files: ${error.message}`, 'ERROR');
+        throw error;
+    }
+}
+
+/**
+ * Create chunk index file for API use
+ */
+async function createChunkIndex() {
+    try {
+        const [south, west, north, east] = CONFIG.NETHERLANDS_BBOX;
+        const latStep = (north - south) / CONFIG.GRID_SIZE;
+        const lonStep = (east - west) / CONFIG.GRID_SIZE;
+        
+        const chunks = [];
+        
+        for (let i = 0; i < CONFIG.GRID_SIZE; i++) {
+            for (let j = 0; j < CONFIG.GRID_SIZE; j++) {
+                const chunkId = i * CONFIG.GRID_SIZE + j + 1;
+                const chunkSouth = south + (i * latStep);
+                const chunkNorth = south + ((i + 1) * latStep);
+                const chunkWest = west + (j * lonStep);
+                const chunkEast = west + ((j + 1) * lonStep);
+                
+                chunks.push({
+                    id: chunkId,
+                    bounds: [chunkSouth, chunkWest, chunkNorth, chunkEast],
+                    file: `chunk-${chunkId}.json`
+                });
+            }
+        }
+        
+        const chunkIndex = {
+            gridSize: CONFIG.GRID_SIZE,
+            totalChunks: chunks.length,
+            bounds: CONFIG.NETHERLANDS_BBOX,
+            chunks: chunks,
+            createdDate: new Date().toISOString()
+        };
+        
+        const indexPath = path.join(CONFIG.OUTPUT_DIR, 'chunk-index.json');
+        await fs.writeFile(indexPath, JSON.stringify(chunkIndex, null, 2));
+        log(`✅ Created chunk index: ${indexPath}`);
+        
+    } catch (error) {
+        log(`❌ Failed to create chunk index: ${error.message}`, 'ERROR');
         throw error;
     }
 }
@@ -290,7 +366,7 @@ async function saveData(nodes) {
  */
 async function downloadAllNodes() {
     try {
-        log('🚴‍♀️ Starting download of all Dutch cycling nodes...');
+        log('🚴‍♀️ Starting download of Dutch cycling nodes with rcn_ref...');
         log(`Configuration: ${CONFIG.GRID_SIZE}x${CONFIG.GRID_SIZE} grid, ${CONFIG.REQUEST_DELAY/1000}s delay`);
         
         // Setup
@@ -345,12 +421,232 @@ async function downloadAllNodes() {
     }
 }
 
-// Run if called directly
-if (require.main === module) {
-    downloadAllNodes().catch(error => {
-        console.error('Fatal error:', error);
-        process.exit(1);
-    });
+/**
+ * Fetch cycling routes for a specific bounding box with retries
+ */
+async function fetchRoutesChunkWithRetry(chunk, retryCount = 0) {
+    const [south, west, north, east] = chunk.bounds;
+    
+    const overpassQuery = `
+        [out:json][timeout:60][maxsize:536870912];
+        (
+            relation["route"="bicycle"]["network"~"^(rcn|lcn|ncn)$"](${south},${west},${north},${east});
+            way(r)["highway"];
+        );
+        out geom;
+    `;
+
+    try {
+        stats.requestsTotal++;
+        log(`Fetching routes for ${chunk.name}: [${south.toFixed(3)}, ${west.toFixed(3)}, ${north.toFixed(3)}, ${east.toFixed(3)}]`);
+        
+        const response = await axios.post(
+            'https://overpass-api.de/api/interpreter',
+            `data=${encodeURIComponent(overpassQuery)}`,
+            {
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'User-Agent': 'Nederlandse-Fietsknooppunten-Routes-Downloader/1.0'
+                },
+                timeout: 90000 // 90 second timeout for routes
+            }
+        );
+
+        const elements = response.data.elements;
+        const relations = elements.filter(el => el.type === 'relation');
+        const ways = elements.filter(el => el.type === 'way');
+        
+        const routes = [];
+        
+        for (const relation of relations) {
+            if (!relation.tags || relation.tags.route !== 'bicycle') continue;
+            
+            const routeWays = relation.members
+                .filter(member => member.type === 'way')
+                .map(member => ways.find(way => way.id === member.ref))
+                .filter(way => way && way.nodes);
+            
+            for (const way of routeWays) {
+                if (!way.geometry || way.geometry.length < 2) continue;
+                
+                routes.push({
+                    relationId: relation.id,
+                    wayId: way.id,
+                    name: relation.tags.name || relation.tags.ref || `Route ${relation.id}`,
+                    network: relation.tags.network || 'unknown',
+                    route: relation.tags.route,
+                    geometry: way.geometry.map(point => ({
+                        lat: point.lat,
+                        lng: point.lon
+                    })),
+                    tags: {
+                        highway: way.tags?.highway,
+                        surface: way.tags?.surface,
+                        lit: way.tags?.lit,
+                        bicycle: way.tags?.bicycle,
+                        cycleway: way.tags?.cycleway
+                    }
+                });
+            }
+        }
+
+        log(`✅ ${chunk.name}: ${routes.length} route segments found`);
+        
+        return {
+            chunkId: chunk.id,
+            routes: routes,
+            bounds: chunk.bounds,
+            timestamp: new Date().toISOString()
+        };
+
+    } catch (error) {
+        log(`❌ Error fetching routes for ${chunk.name}: ${error.message}`);
+        
+        if (error.response?.status === 429 || error.code === 'ECONNRESET') {
+            if (retryCount < CONFIG.MAX_RETRIES) {
+                log(`⏳ Rate limited, waiting ${CONFIG.RETRY_DELAY}ms before retry ${retryCount + 1}/${CONFIG.MAX_RETRIES}`);
+                await sleep(CONFIG.RETRY_DELAY);
+                return fetchRoutesChunkWithRetry(chunk, retryCount + 1);
+            }
+        }
+        
+        stats.errors.push({
+            chunk: chunk.name,
+            error: error.message,
+            type: 'routes'
+        });
+        
+        return {
+            chunkId: chunk.id,
+            routes: [],
+            bounds: chunk.bounds,
+            error: error.message,
+            timestamp: new Date().toISOString()
+        };
+    }
 }
 
-module.exports = { downloadAllNodes, CONFIG };
+/**
+ * Download all cycling routes in chunks and save them
+ */
+async function downloadAllRoutes() {
+    try {
+        log('🛣️ Starting download of Dutch cycling routes...');
+        
+        // Reset stats for routes
+        stats.chunksTotal = 0;
+        stats.chunksCompleted = 0;
+        stats.requestsTotal = 0;
+        stats.retriesTotal = 0;
+        stats.startTime = new Date();
+        stats.errors = [];
+
+        // Create directories
+        await fs.mkdir(CONFIG.OUTPUT_DIR, { recursive: true });
+        await fs.mkdir(CONFIG.CHUNKS_DIR, { recursive: true });
+        
+        // Generate chunks
+        const chunks = generateChunks();
+        stats.chunksTotal = chunks.length;
+        
+        log(`📦 Processing ${chunks.length} chunks for routes...`);
+        
+        const routeChunks = [];
+        
+        // Download routes for each chunk
+        for (const [index, chunk] of chunks.entries()) {
+            log(`\n🔄 Processing chunk ${index + 1}/${chunks.length}: ${chunk.name}`);
+            
+            const chunkData = await fetchRoutesChunkWithRetry(chunk);
+            routeChunks.push(chunkData);
+            
+            // Save individual chunk
+            const chunkFilePath = path.join(CONFIG.CHUNKS_DIR, `routes-chunk-${chunk.id}.json`);
+            await fs.writeFile(chunkFilePath, JSON.stringify(chunkData, null, 2));
+            
+            stats.chunksCompleted++;
+            
+            // Progress update
+            const progress = ((index + 1) / chunks.length * 100).toFixed(1);
+            log(`📊 Progress: ${progress}% (${stats.chunksCompleted}/${stats.chunksTotal})`);
+            
+            // Rate limiting - wait between requests
+            if (index < chunks.length - 1) {
+                log(`⏳ Waiting ${CONFIG.REQUEST_DELAY}ms before next request...`);
+                await sleep(CONFIG.REQUEST_DELAY);
+            }
+        }
+        
+        // Create route chunk index
+        const routeChunkIndex = {
+            totalChunks: chunks.length,
+            chunks: chunks.map(chunk => ({
+                id: chunk.id,
+                name: chunk.name,
+                bounds: chunk.bounds,
+                file: `routes-chunk-${chunk.id}.json`
+            })),
+            created: new Date().toISOString(),
+            type: 'routes'
+        };
+        
+        const routeIndexPath = path.join(CONFIG.OUTPUT_DIR, 'route-chunk-index.json');
+        await fs.writeFile(routeIndexPath, JSON.stringify(routeChunkIndex, null, 2));
+        
+        // Calculate statistics
+        const totalRoutes = routeChunks.reduce((sum, chunk) => sum + chunk.routes.length, 0);
+        const elapsed = (new Date() - stats.startTime) / 1000;
+        
+        log('\n🎉 Route download completed!');
+        log(`📊 Final Statistics:`);
+        log(`   • Total chunks: ${stats.chunksTotal}`);
+        log(`   • Completed chunks: ${stats.chunksCompleted}`);
+        log(`   • Total route segments: ${totalRoutes.toLocaleString()}`);
+        log(`   • Total requests: ${stats.requestsTotal}`);
+        log(`   • Total retries: ${stats.retriesTotal}`);
+        log(`   • Errors: ${stats.errors.length}`);
+        log(`   • Time elapsed: ${elapsed.toFixed(1)} seconds`);
+        log(`   • Average per chunk: ${(elapsed / stats.chunksCompleted).toFixed(2)} seconds`);
+        
+        if (stats.errors.length > 0) {
+            log('\n⚠️ Errors encountered:');
+            stats.errors.forEach(error => {
+                log(`   • ${error.chunk}: ${error.error}`);
+            });
+        }
+        
+        log(`\n📁 Route data saved to:`);
+        log(`   • Individual chunks: ${CONFIG.CHUNKS_DIR}/routes-chunk-*.json`);
+        log(`   • Chunk index: ${routeIndexPath}`);
+        
+        return {
+            totalRoutes,
+            chunks: routeChunks.length,
+            success: stats.errors.length === 0
+        };
+        
+    } catch (error) {
+        log(`💥 Fatal error in route download: ${error.message}`);
+        console.error('Route download error:', error);
+        throw error;
+    }
+}
+
+// Run if called directly
+if (require.main === module) {
+    const command = process.argv[2];
+    
+    if (command === 'routes') {
+        downloadAllRoutes().catch(error => {
+            console.error('Fatal error downloading routes:', error);
+            process.exit(1);
+        });
+    } else {
+        downloadAllNodes().catch(error => {
+            console.error('Fatal error downloading nodes:', error);
+            process.exit(1);
+        });
+    }
+}
+
+module.exports = { downloadAllNodes, downloadAllRoutes, CONFIG };

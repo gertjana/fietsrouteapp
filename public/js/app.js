@@ -5,10 +5,12 @@ let knooppunten = new Map();
 let markers = new Map();
 let osmRoutes = []; // Store actual OSM routes
 let osmRoutesVisible = true; // Toggle state for OSM routes
-let osmRoutesLoading = false; // Toggle state for OSM route loading (start disabled)
+let osmRoutesLoading = true; // Toggle state for OSM route loading (enabled for chunk-based loading)
 let routesCache = new Map(); // Cache for loaded routes by bounds
+let routeLines = []; // Store route polylines on the map
 let loadNodesTimeout = null; // For debouncing map movements
 let currentBounds = null; // Track current bounds to avoid reloading same data
+let lastZoom = null; // Track zoom level for clustering updates
 
 // Initialize application
 document.addEventListener('DOMContentLoaded', function() {
@@ -91,11 +93,19 @@ async function initMap() {
 function debounceLoadNodes() {
     clearTimeout(loadNodesTimeout);
     loadNodesTimeout = setTimeout(() => {
+        // Check zoom level and clear routes if too low
+        const currentZoom = map.getZoom();
+        if (currentZoom < 11) {
+            // Clear routes when zooming to clustering level
+            clearOsmRoutes();
+            updateStatus(`🔍 Zoom verder in (${Math.round(currentZoom)}/11) voor routes`, 'info');
+        }
+        
         loadNodesForCurrentView();
-        // Load routes with much longer delay to prevent API overload
+        // Load routes with shorter delay for chunk-based loading
         setTimeout(() => {
             loadRoutesForCurrentView();
-        }, 5000); // 5 second delay after nodes
+        }, 1000); // 1 second delay after nodes
     }, 2000); // Increased debounce time to 2 seconds
 }
 
@@ -109,9 +119,11 @@ async function loadNodesForCurrentView() {
         const west = bounds.getWest();
         const north = bounds.getNorth();
         const east = bounds.getEast();
+        const currentZoom = map.getZoom();
         
         // Check if current view overlaps significantly with previously loaded area
-        if (currentBounds) {
+        // BUT always reload if zoom level changed (important for clustering)
+        if (currentBounds && lastZoom === currentZoom) {
             const [prevSouth, prevWest, prevNorth, prevEast] = currentBounds.split(',').map(Number);
             
             // Calculate overlap percentage
@@ -120,21 +132,24 @@ async function loadNodesForCurrentView() {
             const overlapNorth = Math.min(north, prevNorth);
             const overlapEast = Math.min(east, prevEast);
             
-            // If there's significant overlap (80% or more), don't reload
+            // If there's significant overlap (80% or more) AND zoom hasn't changed, don't reload
             if (overlapSouth < overlapNorth && overlapWest < overlapEast) {
                 const currentArea = (north - south) * (east - west);
                 const overlapArea = (overlapNorth - overlapSouth) * (overlapEast - overlapWest);
                 const overlapPercentage = overlapArea / currentArea;
                 
                 if (overlapPercentage > 0.8) {
-                    console.log(`📦 Significant overlap (${Math.round(overlapPercentage * 100)}%), skipping reload`);
+                    console.log(`📦 Significant overlap (${Math.round(overlapPercentage * 100)}%) and same zoom (${currentZoom}), skipping reload`);
                     return;
                 }
             }
+        } else if (lastZoom !== currentZoom) {
+            console.log(`🔍 Zoom changed from ${lastZoom} to ${currentZoom}, reloading for clustering update`);
         }
         
-        // Store current bounds for next comparison
+        // Store current bounds and zoom for next comparison
         currentBounds = `${south},${west},${north},${east}`;
+        lastZoom = currentZoom;
         
         // Calculate approximate area size
         const latDiff = north - south;
@@ -143,10 +158,8 @@ async function loadNodesForCurrentView() {
         
         updateStatus(`📡 Ophalen knooppunten voor ~${approxKm}x${approxKm}km gebied...`);
         
-        // Use chunked API for larger areas to avoid missing data
-        const apiEndpoint = approxKm > 50 ? 
-            `/api/cycling-nodes/bounds-chunked/${south}/${west}/${north}/${east}` :
-            `/api/cycling-nodes/bounds/${south}/${west}/${north}/${east}`;
+        // Use clustered API for all areas (with automatic clustering based on zoom/area)
+        const apiEndpoint = `/api/cycling-nodes/clustered/${south}/${west}/${north}/${east}?zoom=${currentZoom}`;
         
         const response = await fetch(apiEndpoint);
         
@@ -160,33 +173,45 @@ async function loadNodesForCurrentView() {
             throw new Error(data.error);
         }
         
-        updateStatus(`🔄 Verwerken ${data.nodes.length} knooppunten...`);
+        updateStatus(`🔄 Verwerken ${data.clusters ? data.clusters.length : data.nodes.length} items...`);
         
-        // Always clear markers when loading new area (chunked or not)
+        // Always clear markers when loading new area
         markers.forEach(marker => map.removeLayer(marker));
         markers.clear();
         knooppunten.clear();
         
-        // Process nodes using OSM ID as unique identifier
+        // Process clusters and nodes
         let addedCount = 0;
-        console.log(`🔄 Processing ${data.nodes.length} nodes, current map has ${knooppunten.size} nodes`);
-        console.log(`🔍 First 5 nodes:`, data.nodes.slice(0, 5).map(n => ({ id: n.id, osmId: n.osmId, lat: n.lat, lng: n.lng })));
+        const items = data.clusters || data.nodes; // Support both clustered and legacy endpoints
         
-        for (const node of data.nodes) {
-            if (node.osmId && node.lat && node.lng) {
-                // Use OSM ID as unique key, but keep node number for display
-                knooppunten.set(node.osmId, node);
-                addKnooppuntToMap(node);
-                addedCount++;
+        console.log(`🔄 Processing ${items.length} items, zoom: ${data.zoom || 'unknown'}`);
+        if (data.clusterCount || data.individualNodeCount) {
+            console.log(`� Clusters: ${data.clusterCount || 0}, Individual nodes: ${data.individualNodeCount || 0}`);
+        }
+        
+        for (const item of items) {
+            if (item.lat && item.lng) {
+                if (item.type === 'cluster') {
+                    // Add cluster marker
+                    addClusterToMap(item);
+                    addedCount++;
+                } else {
+                    // Add individual node (either from cluster endpoint or legacy)
+                    if (item.osmId) {
+                        knooppunten.set(item.osmId, item);
+                        addKnooppuntToMap(item);
+                        addedCount++;
+                    }
+                }
                 
                 // Update progress for large datasets
                 if (addedCount % 50 === 0) {
-                    updateStatus(`📍 Toegevoegd: ${addedCount}/${data.nodes.length} knooppunten`);
+                    updateStatus(`📍 Toegevoegd: ${addedCount}/${items.length} items`);
                     // Small delay to prevent UI blocking
                     await new Promise(resolve => setTimeout(resolve, 5));
                 }
             } else {
-                console.warn(`❌ Skipping invalid node:`, node);
+                console.warn(`❌ Skipping invalid item:`, item);
             }
         }
         
@@ -242,8 +267,18 @@ async function loadRoutesForCurrentView() {
         const north = bounds.getNorth().toFixed(4);
         const east = bounds.getEast().toFixed(4);
         
-        // Check cache first
-        const cacheKey = `${south},${west},${north},${east}`;
+        // Get current zoom level first
+        const currentZoom = map.getZoom();
+        
+        // Only load routes if zoom level is high enough and no clustering is active
+        if (currentZoom < 11) { // Changed from 14 to 11 - only show routes when no clustering
+            console.log('🔍 Zoom level too low for route loading (need zoom ≥ 11), skipping...');
+            updateStatus(`🔍 Zoom verder in (${Math.round(currentZoom)}/11) voor routes`, 'info');
+            return;
+        }
+        
+        // Check cache first (after zoom check)
+        const cacheKey = `${south},${west},${north},${east},${currentZoom}`;
         if (routesCache.has(cacheKey)) {
             console.log('📦 Using cached routes for this area');
             osmRoutes = routesCache.get(cacheKey);
@@ -253,17 +288,9 @@ async function loadRoutesForCurrentView() {
             return;
         }
         
-        // Only load routes if zoom level is high enough (closer view)
-        const currentZoom = map.getZoom();
-        if (currentZoom < 14) { // Increased minimum zoom to reduce load even more
-            console.log('🔍 Zoom level too low for route loading (need zoom ≥ 14), skipping...');
-            updateStatus(`🔍 Zoom verder in (${Math.round(currentZoom)}/14) voor routes`, 'info');
-            return;
-        }
-        
         updateStatus('🛣️ Ophalen fietsroutes...');
         
-        const response = await fetch(`/api/cycling-routes/bounds/${south}/${west}/${north}/${east}`);
+        const response = await fetch(`/api/cycling-routes/bounds/${south}/${west}/${north}/${east}?zoom=${currentZoom}`);
         
         if (!response.ok) {
             throw new Error(`Server error: ${response.status}`);
@@ -308,49 +335,39 @@ function drawOsmRoutes() {
     if (!osmRoutesVisible) return; // Don't draw if routes are hidden
     
     osmRoutes.forEach(route => {
-        if (route.type === 'way' && route.coordinates) {
-            // Single way route
-            const polyline = L.polyline(route.coordinates, {
-                color: '#2196F3',
-                weight: 3,
-                opacity: 0.7,
+        if (route.geometry && route.geometry.length >= 2) {
+            // Convert geometry to coordinate pairs for Leaflet
+            const coordinates = route.geometry.map(point => [point.lat, point.lng]);
+            
+            // Determine color based on network - all dark blue and thicker
+            let color = '#1565C0'; // Dark blue for all routes
+            if (route.network === 'rcn') color = '#1565C0'; // Dark blue for RCN
+            else if (route.network === 'lcn') color = '#1565C0'; // Dark blue for LCN  
+            else if (route.network === 'ncn') color = '#1565C0'; // Dark blue for NCN
+            
+            const polyline = L.polyline(coordinates, {
+                color: color,
+                weight: 5, // Increased from 3 to 5 for thicker lines
+                opacity: 0.8, // Slightly more opaque
                 className: 'osm-route'
             }).addTo(map);
             
-            polyline.bindPopup(`
+            // Create popup with route information
+            const routeInfo = `
                 <div style="min-width: 200px;">
-                    <strong>${route.name}</strong><br>
-                    <small>Netwerk: ${route.network}</small><br>
-                    ${route.rcn_ref ? `<small>Route nummer: ${route.rcn_ref}</small><br>` : ''}
-                    <small>Afstand: ${(route.distance / 1000).toFixed(2)} km</small><br>
-                    <small>Type: ${route.type}</small>
+                    <strong>${route.name || `Route ${route.relationId}`}</strong><br>
+                    <small>Netwerk: ${route.network.toUpperCase()}</small><br>
+                    <small>Way ID: ${route.wayId}</small><br>
+                    <small>Relation ID: ${route.relationId}</small><br>
+                    ${route.tags?.highway ? `<small>Type: ${route.tags.highway}</small><br>` : ''}
+                    ${route.tags?.surface ? `<small>Oppervlak: ${route.tags.surface}</small><br>` : ''}
+                    ${route.tags?.lit ? `<small>Verlichting: ${route.tags.lit}</small><br>` : ''}
+                    <small>Punten: ${route.geometry.length}</small>
                 </div>
-            `);
+            `;
             
+            polyline.bindPopup(routeInfo);
             routeLines.push(polyline);
-            
-        } else if (route.type === 'relation' && route.coordinates) {
-            // Multi-way relation route
-            route.coordinates.forEach((wayCoords, index) => {
-                const polyline = L.polyline(wayCoords, {
-                    color: '#FF9800',
-                    weight: 3,
-                    opacity: 0.7,
-                    className: 'osm-route-relation'
-                }).addTo(map);
-                
-                polyline.bindPopup(`
-                    <div style="min-width: 200px;">
-                        <strong>${route.name}</strong><br>
-                        <small>Deel ${index + 1} van ${route.wayCount}</small><br>
-                        <small>Netwerk: ${route.network}</small><br>
-                        ${route.rcn_ref ? `<small>Route nummer: ${route.rcn_ref}</small><br>` : ''}
-                        <small>Type: Relatie (${route.wayCount} delen)</small>
-                    </div>
-                `);
-                
-                routeLines.push(polyline);
-            });
         }
     });
 }
@@ -491,29 +508,106 @@ function addKnooppuntToMap(knooppunt) {
     // Click handler using OSM ID for unique identification
     marker.on('click', () => toggleKnooppuntVisited(knooppunt.osmId));
     
-    // Popup with enhanced info showing both IDs
-    const popupContent = `
-        <div style="text-align: center; min-width: 180px;">
+    // Tooltip with enhanced info showing both IDs
+    const tooltipContent = `
+        <div style="text-align: center; min-width: 160px;">
             <strong>${knooppunt.name}</strong><br>
-            <small>Knooppunt nummer: ${knooppunt.id}</small><br>
-            <small>Uniek OSM ID: ${knooppunt.osmId}</small><br>
             <small>Netwerk: ${knooppunt.network}</small><br>
-            ${knooppunt.description ? `<small>📝 ${knooppunt.description}</small><br>` : ''}
-            ${knooppunt.note ? `<small>💡 ${knooppunt.note}</small><br>` : ''}
-            ${knooppunt.operator ? `<small>🏢 Beheerder: ${knooppunt.operator}</small><br>` : ''}
             ${knooppunt.addr_city || knooppunt.addr_village ? `<small>📍 ${knooppunt.addr_city || knooppunt.addr_village}</small><br>` : ''}
-            <small>Coördinaten: ${knooppunt.lat.toFixed(4)}, ${knooppunt.lng.toFixed(4)}</small><br>
-            <small>Klik om ${visitedKnooppunten.has(knooppunt.osmId) ? 'als niet bezocht te markeren' : 'als bezocht te markeren'}</small>
+            <small>${knooppunt.lat.toFixed(4)}, ${knooppunt.lng.toFixed(4)}</small>
         </div>
     `;
     
-    marker.bindPopup(popupContent);
+    marker.bindTooltip(tooltipContent, {
+        permanent: false,
+        direction: 'top',
+        offset: [0, -10],
+        className: 'custom-tooltip'
+    });
     
     // Use OSM ID as unique key for markers
     markers.set(knooppunt.osmId, marker);
     
     // Apply initial styling using OSM ID
     updateMarkerStyle(knooppunt.osmId);
+}
+
+// Add cluster marker to map
+function addClusterToMap(cluster) {
+    // Check if cluster contains any visited nodes
+    let hasVisitedNodes = false;
+    let visitedCount = 0;
+    
+    if (cluster.nodes && cluster.nodes.length > 0) {
+        for (const node of cluster.nodes) {
+            // ONLY match by OSM ID - knooppunt numbers are not unique!
+            if (node.osmId && visitedKnooppunten.has(node.osmId)) {
+                hasVisitedNodes = true;
+                visitedCount++;
+                continue;
+            }
+            
+            // Fallback for demo nodes only (with fallback_ prefix)
+            const fallbackKey = `fallback_${node.id}`;
+            if (visitedKnooppunten.has(fallbackKey)) {
+                hasVisitedNodes = true;
+                visitedCount++;
+                continue;
+            }
+        }
+    }
+    
+    // Create marker HTML with appropriate class
+    const markerClass = hasVisitedNodes ? 'cluster-marker has-visited' : 'cluster-marker';
+    
+    // Create HTML content - show visited count for visited clusters
+    let markerContent = `${cluster.count}`;
+    if (hasVisitedNodes) {
+        markerContent = `${cluster.count}<br><small>(${visitedCount})</small>`;
+    }
+    
+    const markerHtml = `<div class="${markerClass}" data-cluster-id="${cluster.id}">${markerContent}</div>`;
+    
+    const marker = L.marker([cluster.lat, cluster.lng], {
+        icon: L.divIcon({
+            html: markerHtml,
+            className: 'custom-cluster-icon',
+            iconSize: [40, 40],
+            iconAnchor: [20, 20]
+        })
+    }).addTo(map);
+    
+    // Click handler to zoom in on cluster
+    marker.on('click', () => {
+        const currentZoom = map.getZoom();
+        map.setView([cluster.lat, cluster.lng], Math.min(currentZoom + 2, 18));
+    });
+    
+    // Enhanced tooltip with visited info
+    const visitedInfo = hasVisitedNodes ? 
+        `<small>🟢 ${visitedCount} van ${cluster.count} bezocht</small><br>` : 
+        '';
+    
+    const tooltipContent = `
+        <div style="text-align: center; min-width: 140px;">
+            <strong>🎯 ${cluster.count} knooppunten</strong><br>
+            ${visitedInfo}
+            ${cluster.nodes && cluster.nodes.length > 0 ? 
+                `<small>${cluster.nodes.slice(0, 3).map(n => n.name || `${n.id}`).join(', ')}${cluster.nodes.length > 3 ? '...' : ''}</small><br>` : 
+                ''}
+            <small>🔍 Klik om in te zoomen</small>
+        </div>
+    `;
+    
+    marker.bindTooltip(tooltipContent, {
+        permanent: false,
+        direction: 'top',
+        offset: [0, -15],
+        className: 'custom-tooltip'
+    });
+    
+    // Use cluster ID as key for markers  
+    markers.set(cluster.id, marker);
 }
 
 // Toggle node selection
@@ -529,6 +623,7 @@ function toggleKnooppuntVisited(id) {
     }
     
     updateMarkerStyle(id);
+    updateAllClusterStyles(); // Update cluster styling when visited status changes
     updateVisitedList();
     updateStats();
     saveData();
@@ -549,6 +644,27 @@ function updateMarkerStyle(id) {
     }
 }
 
+// Update all cluster markers to reflect visited status changes
+function updateAllClusterStyles() {
+    // Check if we're currently in clustering mode (zoom level < 11)
+    const currentZoom = map ? map.getZoom() : 0;
+    
+    if (currentZoom < 11) {
+        // We're in clustering mode, reload the current view to refresh cluster styling
+        // This ensures clusters get updated colors based on visited nodes
+        setTimeout(() => {
+            loadNodesForCurrentView();
+        }, 100); // Small delay to ensure the visited status is fully processed
+    }
+}
+
+// Update a single cluster marker's style based on visited nodes
+function updateSingleClusterStyle(clusterId, clusterElement) {
+    // This function is kept for potential future use if we decide to cache cluster data
+    // For now, we rely on updateAllClusterStyles to reload the view
+    return;
+}
+
 // Update selected points display
 // Clear all visited nodes
 function clearAllVisited() {
@@ -559,6 +675,7 @@ function clearAllVisited() {
         visitedKnooppunten.clear();
         
         oldVisited.forEach(id => updateMarkerStyle(id));
+        updateAllClusterStyles(); // Update cluster styling when all visited are cleared
         updateVisitedList();
         updateStats();
         saveData();
@@ -619,6 +736,7 @@ function removeVisited(osmId) {
         
         // Update marker styling
         updateMarkerStyle(osmId);
+        updateAllClusterStyles(); // Update cluster styling when visited is removed
         updateVisitedList();
         updateStats();
         saveData();
@@ -820,3 +938,9 @@ document.addEventListener('visibilitychange', () => {
         loadCyclingNodes();
     }
 });
+
+// Helper function to clear all markers from the map
+function clearAllMarkers() {
+    markers.forEach(marker => map.removeLayer(marker));
+    markers.clear();
+}

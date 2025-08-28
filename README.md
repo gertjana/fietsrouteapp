@@ -9,7 +9,7 @@ Een moderne web applicatie om Nederlandse fietsknooppunten te verkennen en je be
 - **Lokale data** - snelle loading zonder API beperkingen
 - **Bezochte knooppunten tracker** met collapsible overzicht
 - **Export functionaliteit** voor je bezochte knooppunten
-- **Regionale filtering** per Nederlandse provincie
+- **Clustering** - intelligente groepering op lage zoom niveaus
 - **Complete dataset** - 18,000+ knooppunten
 
 ## 🚀 Quick Start
@@ -77,7 +77,7 @@ fietsrouteapp/
 
 - `GET /api/cycling-nodes` - Alle knooppunten
 - `GET /api/cycling-nodes/bounds/:south/:west/:north/:east` - Knooppunten binnen bounds
-- `GET /api/cycling-nodes/:region` - Knooppunten per provincie
+- `GET /api/cycling-nodes/clustered/` - Geclusterde knooppunten (met zoom parameter)
 - `GET /api/cache/status` - Cache status
 - `DELETE /api/cache` - Cache wissen
 

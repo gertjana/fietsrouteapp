@@ -453,6 +453,52 @@ body {
     border-color: #FF9800;
 }
 
+.legend-cluster {
+    width: 16px;
+    height: 16px;
+    background: linear-gradient(135deg, #FF6B6B, #FF8E53);
+    border: 2px solid #FF4757;
+    border-radius: 50%;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 8px;
+    font-weight: bold;
+    color: white;
+    position: relative;
+}
+
+.legend-cluster::after {
+    content: "3";
+    font-size: 8px;
+}
+
+.legend-cluster-visited {
+    width: 16px;
+    height: 16px;
+    background: linear-gradient(135deg, #FFB3B3, #FFCBA6);
+    border: 2px solid #FFA8AA;
+    border-radius: 50%;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-size: 7px;
+    font-weight: bold;
+    color: #666;
+    position: relative;
+    line-height: 1;
+}
+
+.legend-cluster-visited::after {
+    content: "5\A(2)";
+    white-space: pre;
+    font-size: 7px;
+    text-align: center;
+}
+
 .legend-route {
     width: 20px;
     height: 4px;
@@ -518,6 +564,62 @@ body {
     0% { box-shadow: 0 3px 10px rgba(76, 175, 80, 0.4); }
     50% { box-shadow: 0 6px 25px rgba(76, 175, 80, 0.8); }
     100% { box-shadow: 0 3px 10px rgba(76, 175, 80, 0.4); }
+}
+
+/* Cluster marker styles */
+.cluster-marker {
+    width: 40px;
+    height: 40px;
+    background: linear-gradient(135deg, #FF6B6B, #FF8E53);
+    border: 3px solid #FF4757;
+    border-radius: 50%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 14px;
+    color: white;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(255, 107, 107, 0.4);
+    user-select: none;
+    line-height: 1;
+}
+
+.cluster-marker small {
+    font-size: 10px;
+    font-weight: normal;
+    margin-top: -2px;
+}
+
+.cluster-marker:hover {
+    transform: scale(1.2);
+    z-index: 1000;
+    box-shadow: 0 8px 25px rgba(255, 107, 107, 0.6);
+    background: linear-gradient(135deg, #FF5722, #FF7043);
+}
+
+/* Cluster marker with visited nodes - lighter colors */
+.cluster-marker.has-visited {
+    background: linear-gradient(135deg, #FFB3B3, #FFCBA6);
+    border: 3px solid #FFA8AA;
+    box-shadow: 0 4px 15px rgba(255, 184, 179, 0.4);
+    color: #666;
+}
+
+.cluster-marker.has-visited small {
+    color: #888;
+}
+
+.cluster-marker.has-visited:hover {
+    background: linear-gradient(135deg, #FF9999, #FFB380);
+    box-shadow: 0 8px 25px rgba(255, 184, 179, 0.6);
+}
+
+.custom-cluster-icon {
+    background: transparent !important;
+    border: none !important;
 }
 
 /* Custom leaflet popup */
@@ -660,4 +762,20 @@ body {
     .visited-item {
         width: 100%;
     }
+}
+
+/* Custom tooltip styles */
+.custom-tooltip {
+    background: rgba(0, 0, 0, 0.8) !important;
+    border: none !important;
+    border-radius: 8px !important;
+    color: white !important;
+    font-size: 12px !important;
+    padding: 8px 12px !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+    max-width: 200px !important;
+}
+
+.custom-tooltip::before {
+    border-top-color: rgba(0, 0, 0, 0.8) !important;
 }
