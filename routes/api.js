@@ -31,7 +31,7 @@ async function loadChunkIndex() {
         const indexPath = path.join(DATA_DIR, CHUNK_INDEX_FILE);
         const indexData = await fs.readFile(indexPath, 'utf8');
         chunkIndex = JSON.parse(indexData);
-        console.log(`📂 Loaded chunk index with ${chunkIndex.totalChunks} chunks`);
+        // console.log(`📂 Loaded chunk index with ${chunkIndex.totalChunks} chunks`);
         return chunkIndex;
     } catch (error) {
         console.log('📂 No chunk index found, falling back to legacy loading');
@@ -56,7 +56,7 @@ async function loadChunk(chunkId) {
         // Cache the chunk
         chunkCache.set(chunkId, chunk);
         
-        console.log(`📂 Loaded chunk ${chunkId} with ${chunk.count} nodes`);
+        // console.log(`📂 Loaded chunk ${chunkId} with ${chunk.count} nodes`);
         return chunk;
     } catch (error) {
         console.error(`❌ Failed to load chunk ${chunkId}:`, error.message);
@@ -78,7 +78,7 @@ function findIntersectingChunks(south, west, north, east) {
                 north < chunkSouth || south > chunkNorth);
     });
     
-    console.log(`🔍 Found ${intersectingChunks.length} intersecting chunks for bounds [${south}, ${west}, ${north}, ${east}]`);
+    // console.log(`🔍 Found ${intersectingChunks.length} intersecting chunks for bounds [${south}, ${west}, ${north}, ${east}]`);
     return intersectingChunks;
 }
 
@@ -109,7 +109,7 @@ async function loadNodesFromChunks(south, west, north, east) {
             }
         }
         
-        console.log(`📂 Loaded ${allNodes.length} nodes from ${intersectingChunks.length} chunks`);
+        // console.log(`📂 Loaded ${allNodes.length} nodes from ${intersectingChunks.length} chunks`);
         return allNodes;
         
     } catch (error) {
@@ -129,7 +129,7 @@ async function loadRouteChunkIndex() {
         const indexPath = path.join(DATA_DIR, ROUTE_CHUNK_INDEX_FILE);
         const indexData = await fs.readFile(indexPath, 'utf8');
         routeChunkIndex = JSON.parse(indexData);
-        console.log(`🛣️ Loaded route chunk index with ${routeChunkIndex.totalChunks} chunks`);
+        // console.log(`🛣️ Loaded route chunk index with ${routeChunkIndex.totalChunks} chunks`);
         return routeChunkIndex;
     } catch (error) {
         console.log('🛣️ No route chunk index found');
@@ -153,7 +153,7 @@ async function loadRouteChunk(chunkId) {
         
         // Cache the chunk
         routeChunkCache.set(chunkId, chunk);
-        console.log(`📂 Loaded route chunk ${chunkId} with ${chunk.routes ? chunk.routes.length : 0} routes`);
+        // console.log(`📂 Loaded route chunk ${chunkId} with ${chunk.routes ? chunk.routes.length : 0} routes`);
         
         return chunk;
     } catch (error) {
@@ -198,7 +198,7 @@ async function loadRoutesFromChunks(south, west, north, east, zoom = 11) {
         const intersectingChunks = findIntersectingRouteChunks(south, west, north, east);
         const allRoutes = [];
         
-        console.log(`🔍 Found ${intersectingChunks.length} intersecting route chunks for bounds [${south}, ${west}, ${north}, ${east}]`);
+        // console.log(`🔍 Found ${intersectingChunks.length} intersecting route chunks for bounds [${south}, ${west}, ${north}, ${east}]`);
         
         for (const chunkInfo of intersectingChunks) {
             const chunk = await loadRouteChunk(chunkInfo.id);
@@ -217,7 +217,7 @@ async function loadRoutesFromChunks(south, west, north, east, zoom = 11) {
             }
         }
         
-        console.log(`📂 Loaded ${allRoutes.length} routes from ${intersectingChunks.length} chunks`);
+        // console.log(`📂 Loaded ${allRoutes.length} routes from ${intersectingChunks.length} chunks`);
         return allRoutes;
         
     } catch (error) {

@@ -159,7 +159,7 @@ function clusterNodesForBounds(nodes, south, west, north, east, explicitZoom = n
     const zoom = explicitZoom !== null ? explicitZoom : calculateZoomFromBounds(south, west, north, east);
     const clusters = clusterNodes(nodes, zoom);
     
-    console.log(`🎯 Clustered ${nodes.length} nodes into ${clusters.length} items at zoom ${zoom} (distance: ${getClusterDistance(zoom)}km)`);
+    // console.log(`🎯 Clustered ${nodes.length} nodes into ${clusters.length} items at zoom ${zoom} (distance: ${getClusterDistance(zoom)}km)`);
     
     return {
         clusters: clusters,

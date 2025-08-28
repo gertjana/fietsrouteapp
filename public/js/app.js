@@ -258,7 +258,6 @@ async function loadNodesForCurrentView() {
         }
 
         updateStats();
-        updateVisitedList();
         
     } catch (error) {
         console.error('Error loading cycling nodes for current view:', error);
@@ -578,8 +577,6 @@ function addClusterToMap(cluster) {
     const totalNodes = cluster.count;
     const visitedPercentage = totalNodes > 0 ? (visitedCount / totalNodes) : 0;
     
-    console.log(`Debug cluster: totalNodes=${totalNodes}, visitedCount=${visitedCount}, cluster.count=${cluster.count}`);
-    
     // Calculate pie chart
     const visitedAngle = visitedPercentage * 360;
     const radius = 18;
@@ -610,25 +607,25 @@ function addClusterToMap(cluster) {
             'Z'
         ].join(' ');
         
-        pieSliceHtml = `<path d="${pathData}" fill="#4CAF50" opacity="0.9"/>`;
+        pieSliceHtml = `<path d="${pathData}" fill="#E67E22" opacity="0.9"/>`;
     }
     
-    // Determine colors based on visited status
+    // Determine colors based on visited status - Blue/Orange colorblind-friendly scheme
     let backgroundColor, borderColor;
     if (visitedCount === 0) {
-        // No visited nodes - red
-        backgroundColor = '#FF6B6B';
-        borderColor = '#FF4757';
+        // No visited nodes - blue
+        backgroundColor = '#3498DB';
+        borderColor = '#2980B9';
     } else if (visitedCount === totalNodes) {
-        // All visited - green
-        backgroundColor = '#4CAF50';
-        borderColor = '#388E3C';
+        // All visited - orange
+        backgroundColor = '#E67E22';
+        borderColor = '#D35400';
     } else {
-        // Partially visited - red base (same as unvisited) with green pie slice overlay
-        backgroundColor = '#FF6B6B';
-        borderColor = '#FF4757';
+        // Partially visited - blue base (same as unvisited) with orange pie slice overlay
+        backgroundColor = '#3498DB';
+        borderColor = '#2980B9';
     }
-    
+
     const markerHtml = `
         <div class="cluster-marker-container">
             <svg width="40" height="40" class="cluster-pie-chart">
@@ -640,8 +637,6 @@ function addClusterToMap(cluster) {
             </svg>
         </div>
     `;
-    
-    console.log(`Creating cluster marker with ${totalNodes} nodes (${visitedCount} visited)`);
     
     const marker = L.marker([cluster.lat, cluster.lng], {
         icon: L.divIcon({
@@ -699,7 +694,6 @@ function toggleKnooppuntVisited(id) {
     
     updateMarkerStyle(id);
     updateAllClusterStyles(); // Update cluster styling when visited status changes
-    updateVisitedList();
     updateStats();
     saveData();
 }
@@ -751,56 +745,11 @@ function clearAllVisited() {
         
         oldVisited.forEach(id => updateMarkerStyle(id));
         updateAllClusterStyles(); // Update cluster styling when all visited are cleared
-        updateVisitedList();
         updateStats();
         saveData();
         
         updateStatus('🗑️ Alle bezochte knooppunten gewist', 'success');
     }
-}
-
-// Update visited list display
-function updateVisitedList() {
-    const container = document.getElementById('visitedList');
-    const barTitle = document.getElementById('visitedBarTitle');
-    
-    if (visitedKnooppunten.size === 0) {
-        container.innerHTML = '<div class="empty-visited">Nog geen knooppunten bezocht</div>';
-        barTitle.textContent = '✅ Bezochte Knooppunten (0)';
-        return;
-    }
-    
-    // Get visited nodes and sort by node number
-    const visitedNodes = Array.from(visitedKnooppunten).map(osmId => {
-        return knooppunten.get(osmId);
-    }).filter(node => node).sort((a, b) => a.id - b.id);
-    
-    // Update bar title with count
-    barTitle.textContent = `✅ Bezochte Knooppunten (${visitedNodes.length})`;
-    
-    container.innerHTML = visitedNodes.map(node => {
-        const locationInfo = node.addr_city || node.addr_village || '';
-        const extraInfo = node.description || node.note || '';
-        
-        return `
-            <div class="visited-item">
-                <div class="visited-text">
-                    <strong>📍 ${node.id} - ${node.name}</strong>
-                    ${locationInfo ? `<br><small>📍 ${locationInfo}</small>` : ''}
-                    ${extraInfo ? `<br><small>💬 ${extraInfo}</small>` : ''}
-                </div>
-                <button class="visited-remove" onclick="removeVisited('${node.osmId}')" title="Verwijderen">×</button>
-            </div>
-        `;
-    }).join('');
-    
-    updateStats();
-}
-
-// Toggle visited bar
-function toggleVisitedBar() {
-    const visitedBar = document.getElementById('visitedBar');
-    visitedBar.classList.toggle('collapsed');
 }
 
 // Remove individual visited node
@@ -812,7 +761,6 @@ function removeVisited(osmId) {
         // Update marker styling
         updateMarkerStyle(osmId);
         updateAllClusterStyles(); // Update cluster styling when visited is removed
-        updateVisitedList();
         updateStats();
         saveData();
         
@@ -838,6 +786,9 @@ function updateStats() {
 // Draw route lines on map
 // Export visited nodes to text format
 function exportVisited() {
+    console.log('Export function called. visitedKnooppunten size:', visitedKnooppunten.size);
+    console.log('visitedKnooppunten contents:', Array.from(visitedKnooppunten));
+    
     if (visitedKnooppunten.size === 0) {
         updateStatus('⚠️ Geen bezochte knooppunten om te exporteren', 'error');
         return;
@@ -845,8 +796,12 @@ function exportVisited() {
     
     // Get visited nodes and sort by node number
     const visitedNodes = Array.from(visitedKnooppunten).map(osmId => {
-        return knooppunten.get(osmId);
+        const node = knooppunten.get(osmId);
+        console.log('Processing osmId for export:', osmId, 'Found node:', node);
+        return node;
     }).filter(node => node).sort((a, b) => a.id - b.id);
+    
+    console.log('Filtered visited nodes for export:', visitedNodes);
     
     const exportData = {
         exportDate: new Date().toISOString(),
@@ -859,6 +814,8 @@ function exportVisited() {
         }))
     };
     
+    console.log('Final export data:', exportData);
+    
     const dataStr = JSON.stringify(exportData, null, 2);
     const dataBlob = new Blob([dataStr], {type: 'application/json'});
     
@@ -868,6 +825,97 @@ function exportVisited() {
     link.click();
     
     updateStatus('✅ Bezochte knooppunten geëxporteerd!', 'success');
+}
+
+// Import visited nodes from JSON file
+function importVisited() {
+    const fileInput = document.getElementById('importFileInput');
+    fileInput.click();
+}
+
+// Handle the imported file
+function handleImportFile(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    if (!file.name.endsWith('.json')) {
+        updateStatus('⚠️ Selecteer een geldig JSON bestand', 'error');
+        return;
+    }
+    
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const importData = JSON.parse(e.target.result);
+            
+            // Validate the import data structure
+            if (!importData.visitedNodes || !Array.isArray(importData.visitedNodes)) {
+                updateStatus('⚠️ Ongeldig bestandsformaat - geen visitedNodes array gevonden', 'error');
+                return;
+            }
+            
+            // Count successful imports
+            let successCount = 0;
+            let duplicateCount = 0;
+            let errorCount = 0;
+            
+            console.log('Import data structure:', importData);
+            console.log('Number of nodes to import:', importData.visitedNodes.length);
+            console.log('Current visited nodes:', Array.from(visitedKnooppunten));
+            
+            // Process each visited node
+            importData.visitedNodes.forEach(nodeData => {
+                try {
+                    if (nodeData.osmId) {
+                        console.log('Processing node:', nodeData.osmId, 'Already visited:', visitedKnooppunten.has(nodeData.osmId));
+                        // Check if already visited
+                        if (visitedKnooppunten.has(nodeData.osmId)) {
+                            duplicateCount++;
+                        } else {
+                            visitedKnooppunten.add(nodeData.osmId);
+                            successCount++;
+                        }
+                    } else {
+                        console.log('Node missing osmId:', nodeData);
+                        errorCount++;
+                    }
+                } catch (error) {
+                    console.log('Error processing node:', error, nodeData);
+                    errorCount++;
+                }
+            });
+            
+            // Save the updated data to localStorage
+            saveData();
+            
+            // Update the display
+            updateStats();
+            updateAllClusterStyles();
+            
+            // Show import results
+            let message = `✅ Import voltooid: ${successCount} nieuwe knooppunten toegevoegd`;
+            if (duplicateCount > 0) {
+                message += `, ${duplicateCount} waren al bezocht`;
+            }
+            if (errorCount > 0) {
+                message += `, ${errorCount} foutieve records overgeslagen`;
+            }
+            
+            updateStatus(message, 'success');
+            
+        } catch (error) {
+            updateStatus('❌ Fout bij lezen van bestand: ' + error.message, 'error');
+        }
+    };
+    
+    reader.onerror = function() {
+        updateStatus('❌ Fout bij lezen van bestand', 'error');
+    };
+    
+    reader.readAsText(file);
+    
+    // Reset the file input
+    event.target.value = '';
 }
 
 // Clear route lines (user-drawn routes only)

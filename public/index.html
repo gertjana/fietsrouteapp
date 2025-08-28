@@ -46,7 +46,9 @@
                         <p>💡 Klik direct op knooppunten op de kaart om ze als bezocht te markeren</p>
                     </div>
                     <button class="btn btn-info" onclick="exportVisited()">Export Bezochte</button>
+                    <button class="btn btn-success" onclick="importVisited()">Import Bezochte</button>
                     <button class="btn btn-danger" onclick="clearAllVisited()">Alles Wissen</button>
+                    <input type="file" id="importFileInput" accept=".json" style="display: none;" onchange="handleImportFile(event)">
                 </div>
             </div>
             
@@ -65,17 +67,9 @@
                             <span>Bezocht</span>
                         </div>
                         <div class="legend-item">
-                            <div class="legend-cluster"></div>
+                            <div class="legend-cluster-unified"></div>
                             <span>Cluster (zoom ≤10)</span>
                         </div>
-                        <div class="legend-item">
-                            <div class="legend-cluster-pie"></div>
-                            <span>Cluster voortgang</span>
-                        </div>
-                    </div>
-                    <div class="control-buttons">
-                        <button onclick="refreshData()" class="btn-small">🔄 Refresh</button>
-                        <button onclick="fitToNodes()" class="btn-small">🎯 Fit View</button>
                     </div>
                 </div>
                 
@@ -83,19 +77,6 @@
                     <div class="spinner"></div>
                     <p>Laden van Nederlandse fietsknooppunten...</p>
                     <small>Via lokale Node.js server</small>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Collapsible visited nodes bar at bottom -->
-        <div class="visited-bar collapsed" id="visitedBar">
-            <div class="visited-bar-header" onclick="toggleVisitedBar()">
-                <span id="visitedBarTitle">✅ Bezochte Knooppunten (0)</span>
-                <span class="visited-bar-toggle" id="visitedBarToggle">▲</span>
-            </div>
-            <div class="visited-bar-content" id="visitedBarContent">
-                <div id="visitedList">
-                    <div class="empty-visited">Nog geen knooppunten bezocht</div>
                 </div>
             </div>
         </div>

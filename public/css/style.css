@@ -278,6 +278,16 @@ body {
     box-shadow: 0 4px 12px rgba(0, 188, 212, 0.4);
 }
 
+.btn-success {
+    background: linear-gradient(135deg, #4CAF50, #45a049);
+    color: white;
+}
+
+.btn-success:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(76, 175, 80, 0.4);
+}
+
 .btn-danger {
     background: linear-gradient(135deg, #f44336, #d32f2f);
     color: white;
@@ -455,15 +465,15 @@ body {
 }
 
 .legend-visited {
-    background: #E8F5E8;
-    border-color: #4CAF50;
+    background: #FDF2E9;
+    border-color: #E67E22;
 }
 
 .legend-cluster {
     width: 16px;
     height: 16px;
-    background: #FF6B6B;
-    border: 2px solid #FF4757;
+    background: #3498DB;
+    border: 2px solid #2980B9;
     border-radius: 50%;
     flex-shrink: 0;
     display: flex;
@@ -492,8 +502,8 @@ body {
     position: absolute;
     width: 16px;
     height: 16px;
-    background: #FF6B6B;
-    border: 1px solid #FF4757;
+    background: #3498DB;
+    border: 1px solid #2980B9;
     border-radius: 50%;
     top: 0;
     left: 0;
@@ -512,10 +522,32 @@ body {
     z-index: 2;
 }
 
-/* Create a partial green slice */
+.legend-cluster-unified {
+    width: 16px;
+    height: 16px;
+    position: relative;
+    flex-shrink: 0;
+    background: conic-gradient(from 270deg, #E67E22 0deg 144deg, #3498DB 144deg 360deg);
+    border: 1px solid #2980B9;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.legend-cluster-unified::after {
+    content: "8";
+    font-size: 7px;
+    font-weight: bold;
+    color: white;
+    text-shadow: 1px 1px 1px rgba(0,0,0,0.9);
+    z-index: 2;
+}
+
+/* Create a partial orange slice */
 .legend-cluster-pie {
-    background: conic-gradient(from 270deg, #4CAF50 0deg 120deg, #FF6B6B 120deg 360deg);
-    border: 1px solid #FF4757;
+    background: conic-gradient(from 270deg, #E67E22 0deg 120deg, #3498DB 120deg 360deg);
+    border: 1px solid #2980B9;
     border-radius: 50%;
 }
 
@@ -575,9 +607,9 @@ body {
 }
 
 .knooppunt-marker.visited {
-    border-color: #4CAF50;
-    background: #E8F5E8;
-    color: #2E7D32;
+    border-color: #E67E22;
+    background: #FDF2E9;
+    color: #D35400;
 }
 
 @keyframes pulse {
