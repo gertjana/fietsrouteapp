@@ -5,6 +5,12 @@
     box-sizing: border-box;
 }
 
+/* Grayscale map tiles */
+.grayscale-tiles {
+    filter: grayscale(100%) contrast(1.1) brightness(1.1);
+    -webkit-filter: grayscale(100%) contrast(1.1) brightness(1.1);
+}
+
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -449,14 +455,14 @@ body {
 }
 
 .legend-visited {
-    background: #FFF3E0;
-    border-color: #FF9800;
+    background: #E8F5E8;
+    border-color: #4CAF50;
 }
 
 .legend-cluster {
     width: 16px;
     height: 16px;
-    background: linear-gradient(135deg, #FF6B6B, #FF8E53);
+    background: #FF6B6B;
     border: 2px solid #FF4757;
     border-radius: 50%;
     flex-shrink: 0;
@@ -474,29 +480,43 @@ body {
     font-size: 8px;
 }
 
-.legend-cluster-visited {
+.legend-cluster-pie {
     width: 16px;
     height: 16px;
-    background: linear-gradient(135deg, #FFB3B3, #FFCBA6);
-    border: 2px solid #FFA8AA;
-    border-radius: 50%;
-    flex-shrink: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    font-size: 7px;
-    font-weight: bold;
-    color: #666;
     position: relative;
-    line-height: 1;
+    flex-shrink: 0;
 }
 
-.legend-cluster-visited::after {
-    content: "5\A(2)";
-    white-space: pre;
+.legend-cluster-pie::before {
+    content: "";
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    background: #FF6B6B;
+    border: 1px solid #FF4757;
+    border-radius: 50%;
+    top: 0;
+    left: 0;
+}
+
+.legend-cluster-pie::after {
+    content: "5";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
     font-size: 7px;
-    text-align: center;
+    font-weight: bold;
+    color: white;
+    text-shadow: 1px 1px 1px rgba(0,0,0,0.8);
+    z-index: 2;
+}
+
+/* Create a partial green slice */
+.legend-cluster-pie {
+    background: conic-gradient(from 270deg, #4CAF50 0deg 120deg, #FF6B6B 120deg 360deg);
+    border: 1px solid #FF4757;
+    border-radius: 50%;
 }
 
 .legend-route {
@@ -555,9 +575,9 @@ body {
 }
 
 .knooppunt-marker.visited {
-    border-color: #FF9800;
-    background: #FFF3E0;
-    color: #F57C00;
+    border-color: #4CAF50;
+    background: #E8F5E8;
+    color: #2E7D32;
 }
 
 @keyframes pulse {
@@ -567,6 +587,78 @@ body {
 }
 
 /* Cluster marker styles */
+.cluster-marker-container {
+    position: relative;
+    width: 40px;
+    height: 40px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.cluster-marker-container:hover {
+    transform: scale(1.2);
+    z-index: 1000;
+}
+
+.cluster-marker-simple {
+    width: 40px;
+    height: 40px;
+    background: linear-gradient(135deg, #FF6B6B, #FF8E53);
+    border: 3px solid #FF4757;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 14px;
+    color: white;
+    box-shadow: 0 4px 15px rgba(255, 107, 107, 0.4);
+    user-select: none;
+}
+
+.cluster-marker-simple.visited-all {
+    background: linear-gradient(135deg, #4CAF50, #66BB6A);
+    border: 3px solid #388E3C;
+    box-shadow: 0 4px 15px rgba(76, 175, 80, 0.4);
+}
+
+.cluster-pie-chart {
+    position: absolute;
+    top: 0;
+    left: 0;
+    cursor: pointer;
+}
+
+.cluster-text {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    user-select: none;
+    z-index: 10;
+}
+
+.cluster-total-overlay {
+    font-size: 12px;
+    font-weight: bold;
+    color: white;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+    line-height: 1;
+}
+
+.cluster-marker:hover {
+    transform: scale(1.2);
+    z-index: 1000;
+    box-shadow: 0 8px 25px rgba(255, 107, 107, 0.6);
+    background: linear-gradient(135deg, #FF5722, #FF7043);
+}
+
+/* Legacy cluster marker styles - kept for backwards compatibility */
 .cluster-marker {
     width: 40px;
     height: 40px;
@@ -593,13 +685,6 @@ body {
     margin-top: -2px;
 }
 
-.cluster-marker:hover {
-    transform: scale(1.2);
-    z-index: 1000;
-    box-shadow: 0 8px 25px rgba(255, 107, 107, 0.6);
-    background: linear-gradient(135deg, #FF5722, #FF7043);
-}
-
 /* Cluster marker with visited nodes - lighter colors */
 .cluster-marker.has-visited {
     background: linear-gradient(135deg, #FFB3B3, #FFCBA6);
@@ -620,6 +705,35 @@ body {
 .custom-cluster-icon {
     background: transparent !important;
     border: none !important;
+}
+
+.custom-cluster-icon .cluster-marker-container {
+    position: relative !important;
+    width: 40px !important;
+    height: 40px !important;
+}
+
+.custom-cluster-icon .cluster-text {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    pointer-events: none !important;
+    user-select: none !important;
+    z-index: 100 !important;
+}
+
+.custom-cluster-icon .cluster-total-overlay {
+    font-size: 14px !important;
+    font-weight: bold !important;
+    color: white !important;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.9) !important;
+    line-height: 1 !important;
+    display: block !important;
 }
 
 /* Custom leaflet popup */

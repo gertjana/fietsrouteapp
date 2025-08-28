@@ -43,16 +43,23 @@ async function initMap() {
     try {
         updateStatus('🗺️ Kaart initialiseren...');
         
-        // Create map centered on Utrecht (central Netherlands)
-        // Zoom level 11 shows approximately 30x30km area
+        // Create map centered on Netherlands with bounds to show the entire country
+        // Netherlands bounds: approximately 50.7N to 53.6N latitude, 3.2E to 7.2E longitude
         map = L.map('map', {
-            center: [52.0907, 5.1214], // Utrecht area
-            zoom: 11, // This shows roughly 30x30km
+            center: [52.2, 5.5], // Center of Netherlands
+            zoom: 7, // Zoom level to show entire Netherlands
             zoomControl: true,
             preferCanvas: true // Better performance for many markers
         });
         
-        // Add OpenStreetMap tiles
+        // Add grayscale OpenStreetMap tiles (default)
+        const grayscaleLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+            maxZoom: 18,
+            className: 'grayscale-tiles'
+        });
+        
+        // Add regular OpenStreetMap tiles
         const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
             maxZoom: 18
@@ -65,16 +72,26 @@ async function initMap() {
             opacity: 0.7
         });
         
-        // Set default layer
-        osmLayer.addTo(map);
+        // Set grayscale as default layer
+        grayscaleLayer.addTo(map);
         
         // Layer control
         const baseLayers = {
+            "Grijstinten Kaart": grayscaleLayer,
             "Standaard Kaart": osmLayer,
             "Fietskaart": cyclingLayer
         };
         
         L.control.layers(baseLayers).addTo(map);
+        
+        // Set map bounds to Netherlands after initialization
+        setTimeout(() => {
+            const netherlandsBounds = [
+                [50.7, 3.2], // Southwest corner
+                [53.6, 7.2]  // Northeast corner
+            ];
+            map.fitBounds(netherlandsBounds);
+        }, 100);
         
         // Add event listeners for map movement to load data dynamically
         // Use debouncing to prevent too frequent API calls
@@ -347,7 +364,7 @@ function drawOsmRoutes() {
             
             const polyline = L.polyline(coordinates, {
                 color: color,
-                weight: 5, // Increased from 3 to 5 for thicker lines
+                weight: 2, // Set to 2 for medium thickness
                 opacity: 0.8, // Slightly more opaque
                 className: 'osm-route'
             }).addTo(map);
@@ -557,16 +574,74 @@ function addClusterToMap(cluster) {
         }
     }
     
-    // Create marker HTML with appropriate class
-    const markerClass = hasVisitedNodes ? 'cluster-marker has-visited' : 'cluster-marker';
+    // Create pie chart SVG for cluster marker - always use pie chart format
+    const totalNodes = cluster.count;
+    const visitedPercentage = totalNodes > 0 ? (visitedCount / totalNodes) : 0;
     
-    // Create HTML content - show visited count for visited clusters
-    let markerContent = `${cluster.count}`;
-    if (hasVisitedNodes) {
-        markerContent = `${cluster.count}<br><small>(${visitedCount})</small>`;
+    console.log(`Debug cluster: totalNodes=${totalNodes}, visitedCount=${visitedCount}, cluster.count=${cluster.count}`);
+    
+    // Calculate pie chart
+    const visitedAngle = visitedPercentage * 360;
+    const radius = 18;
+    const centerX = 20;
+    const centerY = 20;
+    
+    let pieSliceHtml = '';
+    
+    if (visitedCount > 0 && visitedCount < totalNodes) {
+        // Partial pie chart - create visited slice
+        const startAngle = -90; // Start at top
+        const endAngle = startAngle + visitedAngle;
+        
+        const startAngleRad = (startAngle * Math.PI) / 180;
+        const endAngleRad = (endAngle * Math.PI) / 180;
+        
+        const startX = centerX + radius * Math.cos(startAngleRad);
+        const startY = centerY + radius * Math.sin(startAngleRad);
+        const endX = centerX + radius * Math.cos(endAngleRad);
+        const endY = centerY + radius * Math.sin(endAngleRad);
+        
+        const largeArcFlag = visitedAngle > 180 ? 1 : 0;
+        
+        const pathData = [
+            `M ${centerX} ${centerY}`,
+            `L ${startX} ${startY}`,
+            `A ${radius} ${radius} 0 ${largeArcFlag} 1 ${endX} ${endY}`,
+            'Z'
+        ].join(' ');
+        
+        pieSliceHtml = `<path d="${pathData}" fill="#4CAF50" opacity="0.9"/>`;
     }
     
-    const markerHtml = `<div class="${markerClass}" data-cluster-id="${cluster.id}">${markerContent}</div>`;
+    // Determine colors based on visited status
+    let backgroundColor, borderColor;
+    if (visitedCount === 0) {
+        // No visited nodes - red
+        backgroundColor = '#FF6B6B';
+        borderColor = '#FF4757';
+    } else if (visitedCount === totalNodes) {
+        // All visited - green
+        backgroundColor = '#4CAF50';
+        borderColor = '#388E3C';
+    } else {
+        // Partially visited - red base (same as unvisited) with green pie slice overlay
+        backgroundColor = '#FF6B6B';
+        borderColor = '#FF4757';
+    }
+    
+    const markerHtml = `
+        <div class="cluster-marker-container">
+            <svg width="40" height="40" class="cluster-pie-chart">
+                <circle cx="20" cy="20" r="18" fill="${backgroundColor}" stroke="${borderColor}" stroke-width="2"/>
+                ${pieSliceHtml}
+                <text x="20" y="20" text-anchor="middle" dominant-baseline="central" 
+                      fill="white" font-size="14" font-weight="bold" 
+                      stroke="black" stroke-width="0.5">${totalNodes}</text>
+            </svg>
+        </div>
+    `;
+    
+    console.log(`Creating cluster marker with ${totalNodes} nodes (${visitedCount} visited)`);
     
     const marker = L.marker([cluster.lat, cluster.lng], {
         icon: L.divIcon({
