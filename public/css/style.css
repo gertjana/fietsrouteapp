@@ -442,15 +442,15 @@ body {
 .legend-item {
     display: flex;
     align-items: center;
-    gap: 6px;
-    margin-bottom: 4px;
+    gap: 10px;
+    margin-bottom: 8px;
 }
 
 .legend-dot {
-    width: 14px;
-    height: 14px;
+    width: 28px;
+    height: 28px;
     border-radius: 50%;
-    border: 2px solid;
+    border: 3px solid;
     flex-shrink: 0;
 }
 
@@ -523,12 +523,12 @@ body {
 }
 
 .legend-cluster-unified {
-    width: 16px;
-    height: 16px;
+    width: 28px;
+    height: 28px;
     position: relative;
     flex-shrink: 0;
     background: conic-gradient(from 270deg, #E67E22 0deg 144deg, #3498DB 144deg 360deg);
-    border: 1px solid #2980B9;
+    border: 3px solid #2980B9;
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -537,7 +537,7 @@ body {
 
 .legend-cluster-unified::after {
     content: "8";
-    font-size: 7px;
+    font-size: 11px;
     font-weight: bold;
     color: white;
     text-shadow: 1px 1px 1px rgba(0,0,0,0.9);

@@ -8,8 +8,8 @@ const router = express.Router();
 const DATA_DIR = path.join(__dirname, '..', 'data');
 const CHUNKS_DIR = path.join(DATA_DIR, 'chunks');
 const RAW_DATA_FILE = 'raw-nodes-data.json';
-const GEOJSON_FILE = 'nederlandse-fietsknooppunten-volledig.geojson';
-const CHUNK_INDEX_FILE = 'chunk-index.json';
+// const GEOJSON_FILE = 'nederlandse-fietsknooppunten-volledig.geojson';
+const CHUNK_INDEX_FILE = 'nodes-chunk-index.json';
 const ROUTE_CHUNK_INDEX_FILE = 'route-chunk-index.json';
 const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours for local data
 
@@ -49,7 +49,7 @@ async function loadChunk(chunkId) {
             return chunkCache.get(chunkId);
         }
         
-        const chunkPath = path.join(CHUNKS_DIR, `chunk-${chunkId}.json`);
+        const chunkPath = path.join(CHUNKS_DIR, `nodes-chunk-${chunkId}.json`);
         const chunkData = await fs.readFile(chunkPath, 'utf8');
         const chunk = JSON.parse(chunkData);
         

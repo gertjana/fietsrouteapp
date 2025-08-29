@@ -26,7 +26,7 @@ const CONFIG = {
     // File paths
     OUTPUT_DIR: './data',
     CHUNKS_DIR: './data/chunks',
-    GEOJSON_FILE: 'nederlandse-fietsknooppunten-volledig.geojson',
+    // GEOJSON_FILE: 'nederlandse-fietsknooppunten-volledig.geojson',
     RAW_DATA_FILE: 'raw-nodes-data.json',
     LOG_FILE: 'download.log'
 };
@@ -210,7 +210,7 @@ async function saveChunk(chunk, nodes) {
             downloadDate: new Date().toISOString()
         };
         
-        const chunkPath = path.join(CONFIG.CHUNKS_DIR, `chunk-${chunk.id}.json`);
+        const chunkPath = path.join(CONFIG.CHUNKS_DIR, `nodes-chunk-${chunk.id}.json`);
         await fs.writeFile(chunkPath, JSON.stringify(chunkData, null, 2));
         
         log(`💾 Saved chunk ${chunk.id}: ${nodes.length} nodes to ${chunkPath}`);

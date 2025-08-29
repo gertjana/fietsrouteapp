@@ -11,6 +11,96 @@ let routeLines = []; // Store route polylines on the map
 let loadNodesTimeout = null; // For debouncing map movements
 let currentBounds = null; // Track current bounds to avoid reloading same data
 let lastZoom = null; // Track zoom level for clustering updates
+let currentTileLayer = null; // Track current tile layer for theme switching
+
+// Utility functions
+// Calculate distance between two points in meters using Haversine formula
+function calculateDistance(lat1, lng1, lat2, lng2) {
+    const R = 6371000; // Earth's radius in meters
+    const φ1 = lat1 * Math.PI/180;
+    const φ2 = lat2 * Math.PI/180;
+    const Δφ = (lat2-lat1) * Math.PI/180;
+    const Δλ = (lng2-lng1) * Math.PI/180;
+
+    const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+              Math.cos(φ1) * Math.cos(φ2) *
+              Math.sin(Δλ/2) * Math.sin(Δλ/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+    return R * c; // Distance in meters
+}
+
+// Find all nodes with the same number that are within 500m of each other
+function findGroupedNodes(targetNode) {
+    const groupedNodes = [targetNode];
+    const maxDistance = 500; // 500 meters
+    
+    // Find all nodes with the same number
+    const sameNumberNodes = Array.from(knooppunten.values()).filter(node => 
+        node.id === targetNode.id && node.osmId !== targetNode.osmId
+    );
+    
+    // Check which ones are within 100m
+    sameNumberNodes.forEach(node => {
+        const distance = calculateDistance(
+            targetNode.lat, targetNode.lng,
+            node.lat, node.lng
+        );
+        
+        if (distance <= maxDistance) {
+            groupedNodes.push(node);
+        }
+    });
+    
+    return groupedNodes;
+}
+
+// Cookie utility functions
+function setCookie(name, value, days = 30) {
+    const expires = new Date();
+    expires.setTime(expires.getTime() + (days * 24 * 60 * 60 * 1000));
+    document.cookie = `${name}=${value};expires=${expires.toUTCString()};path=/`;
+}
+
+function getCookie(name) {
+    const nameEQ = name + "=";
+    const ca = document.cookie.split(';');
+    for (let i = 0; i < ca.length; i++) {
+        let c = ca[i];
+        while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+        if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length, c.length);
+    }
+    return null;
+}
+
+// Save map position to cookie
+function saveMapPosition() {
+    if (!map) return;
+    
+    const center = map.getCenter();
+    const zoom = map.getZoom();
+    
+    const mapPosition = {
+        lat: center.lat,
+        lng: center.lng,
+        zoom: zoom
+    };
+    
+    setCookie('mapPosition', JSON.stringify(mapPosition));
+}
+
+// Load map position from cookie
+function loadMapPosition() {
+    const savedPosition = getCookie('mapPosition');
+    if (savedPosition) {
+        try {
+            return JSON.parse(savedPosition);
+        } catch (error) {
+            console.warn('Could not parse saved map position:', error);
+        }
+    }
+    return null;
+}
 
 // Initialize application
 document.addEventListener('DOMContentLoaded', function() {
@@ -43,60 +133,48 @@ async function initMap() {
     try {
         updateStatus('🗺️ Kaart initialiseren...');
         
-        // Create map centered on Netherlands with bounds to show the entire country
-        // Netherlands bounds: approximately 50.7N to 53.6N latitude, 3.2E to 7.2E longitude
+        // Load saved position or use Netherlands defaults
+        const savedPosition = loadMapPosition();
+        const initialCenter = savedPosition ? [savedPosition.lat, savedPosition.lng] : [52.2, 5.5];
+        const initialZoom = savedPosition ? savedPosition.zoom : 7;
+        
+        // Create map with saved or default position
         map = L.map('map', {
-            center: [52.2, 5.5], // Center of Netherlands
-            zoom: 7, // Zoom level to show entire Netherlands
+            center: initialCenter,
+            zoom: initialZoom,
             zoomControl: true,
             preferCanvas: true // Better performance for many markers
         });
         
-        // Add grayscale OpenStreetMap tiles (default)
-        const grayscaleLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-            maxZoom: 18,
-            className: 'grayscale-tiles'
-        });
-        
-        // Add regular OpenStreetMap tiles
-        const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        // Initialize with OpenCycleMap as default
+        currentTileLayer = L.tileLayer('https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png', {
             attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
             maxZoom: 18
         });
         
-        // Add cycling-specific layer
-        const cyclingLayer = L.tileLayer('https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png', {
-            attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-            maxZoom: 18,
-            opacity: 0.7
-        });
+        currentTileLayer.addTo(map);
         
-        // Set grayscale as default layer
-        grayscaleLayer.addTo(map);
-        
-        // Layer control
-        const baseLayers = {
-            "Grijstinten Kaart": grayscaleLayer,
-            "Standaard Kaart": osmLayer,
-            "Fietskaart": cyclingLayer
-        };
-        
-        L.control.layers(baseLayers).addTo(map);
-        
-        // Set map bounds to Netherlands after initialization
-        setTimeout(() => {
-            const netherlandsBounds = [
-                [50.7, 3.2], // Southwest corner
-                [53.6, 7.2]  // Northeast corner
-            ];
-            map.fitBounds(netherlandsBounds);
-        }, 100);
+        // If no saved position, set map bounds to Netherlands after initialization
+        if (!savedPosition) {
+            setTimeout(() => {
+                const netherlandsBounds = [
+                    [50.7, 3.2], // Southwest corner
+                    [53.6, 7.2]  // Northeast corner
+                ];
+                map.fitBounds(netherlandsBounds);
+            }, 100);
+        }
         
         // Add event listeners for map movement to load data dynamically
         // Use debouncing to prevent too frequent API calls
-        map.on('moveend', debounceLoadNodes);
-        map.on('zoomend', debounceLoadNodes);
+        map.on('moveend', () => {
+            debounceLoadNodes();
+            saveMapPosition(); // Save position when map moves
+        });
+        map.on('zoomend', () => {
+            debounceLoadNodes();
+            saveMapPosition(); // Save position when zoom changes
+        });
         
         console.log('✅ Map initialized successfully');
         updateStatus('✅ Kaart geladen!', 'success');
@@ -525,9 +603,14 @@ function addKnooppuntToMap(knooppunt) {
     marker.on('click', () => toggleKnooppuntVisited(knooppunt.osmId));
     
     // Tooltip with enhanced info showing both IDs
+    const groupedNodes = findGroupedNodes(knooppunt);
+    const groupInfo = groupedNodes.length > 1 ? `<small>🔗 ${groupedNodes.length} grouped nodes</small><br>` : '';
+    
     const tooltipContent = `
         <div style="text-align: center; min-width: 160px;">
             <strong>${knooppunt.name}</strong><br>
+            <small>OSM ID: ${knooppunt.osmId}</small><br>
+            ${groupInfo}
             <small>Netwerk: ${knooppunt.network}</small><br>
             ${knooppunt.addr_city || knooppunt.addr_village ? `<small>📍 ${knooppunt.addr_city || knooppunt.addr_village}</small><br>` : ''}
             <small>${knooppunt.lat.toFixed(4)}, ${knooppunt.lng.toFixed(4)}</small>
@@ -680,19 +763,33 @@ function addClusterToMap(cluster) {
     markers.set(cluster.id, marker);
 }
 
-// Toggle node selection
+// Toggle node selection (handles grouped nodes)
 function toggleKnooppuntVisited(id) {
-    if (visitedKnooppunten.has(id)) {
-        // Remove from visited
-        visitedKnooppunten.delete(id);
-        updateStatus(`📍 Knooppunt ${knooppunten.get(id)?.id || id} gemarkeerd als niet bezocht`, 'info');
+    const clickedNode = knooppunten.get(id);
+    if (!clickedNode) return;
+    
+    // Find all grouped nodes (same number, within 100m)
+    const groupedNodes = findGroupedNodes(clickedNode);
+    
+    // Check if any of the grouped nodes are already visited
+    const anyVisited = groupedNodes.some(node => visitedKnooppunten.has(node.osmId));
+    
+    if (anyVisited) {
+        // Remove all grouped nodes from visited
+        groupedNodes.forEach(node => {
+            visitedKnooppunten.delete(node.osmId);
+            updateMarkerStyle(node.osmId);
+        });
+        updateStatus(`📍 Knooppunt ${clickedNode.id} (${groupedNodes.length} nodes) gemarkeerd als niet bezocht`, 'info');
     } else {
-        // Add to visited
-        visitedKnooppunten.add(id);
-        updateStatus(`✅ Knooppunt ${knooppunten.get(id)?.id || id} gemarkeerd als bezocht`, 'success');
+        // Add all grouped nodes to visited
+        groupedNodes.forEach(node => {
+            visitedKnooppunten.add(node.osmId);
+            updateMarkerStyle(node.osmId);
+        });
+        updateStatus(`✅ Knooppunt ${clickedNode.id} (${groupedNodes.length} nodes) gemarkeerd als bezocht`, 'success');
     }
     
-    updateMarkerStyle(id);
     updateAllClusterStyles(); // Update cluster styling when visited status changes
     updateStats();
     saveData();
@@ -743,8 +840,16 @@ function clearAllVisited() {
         const oldVisited = [...visitedKnooppunten];
         visitedKnooppunten.clear();
         
-        oldVisited.forEach(id => updateMarkerStyle(id));
-        updateAllClusterStyles(); // Update cluster styling when all visited are cleared
+        // Clear all markers from the map first
+        clearAllMarkers();
+        
+        // Force reload by clearing bounds cache
+        currentBounds = null;
+        lastZoom = null;
+        
+        // Reload the map to refresh all markers and clusters
+        loadNodesForCurrentView();
+        
         updateStats();
         saveData();
         
@@ -788,6 +893,8 @@ function updateStats() {
 function exportVisited() {
     console.log('Export function called. visitedKnooppunten size:', visitedKnooppunten.size);
     console.log('visitedKnooppunten contents:', Array.from(visitedKnooppunten));
+    console.log('knooppunten Map size:', knooppunten.size);
+    console.log('Sample knooppunten keys:', Array.from(knooppunten.keys()).slice(0, 5));
     
     if (visitedKnooppunten.size === 0) {
         updateStatus('⚠️ Geen bezochte knooppunten om te exporteren', 'error');
@@ -797,11 +904,13 @@ function exportVisited() {
     // Get visited nodes and sort by node number
     const visitedNodes = Array.from(visitedKnooppunten).map(osmId => {
         const node = knooppunten.get(osmId);
-        console.log('Processing osmId for export:', osmId, 'Found node:', node);
+        if (!node) {
+            console.log('WARNING: Node not found for osmId:', osmId);
+        }
         return node;
     }).filter(node => node).sort((a, b) => a.id - b.id);
     
-    console.log('Filtered visited nodes for export:', visitedNodes);
+    console.log('Found visited nodes for export:', visitedNodes.length);
     
     const exportData = {
         exportDate: new Date().toISOString(),
@@ -813,8 +922,6 @@ function exportVisited() {
             coordinates: [node.lat, node.lng]
         }))
     };
-    
-    console.log('Final export data:', exportData);
     
     const dataStr = JSON.stringify(exportData, null, 2);
     const dataBlob = new Blob([dataStr], {type: 'application/json'});
@@ -859,15 +966,10 @@ function handleImportFile(event) {
             let duplicateCount = 0;
             let errorCount = 0;
             
-            console.log('Import data structure:', importData);
-            console.log('Number of nodes to import:', importData.visitedNodes.length);
-            console.log('Current visited nodes:', Array.from(visitedKnooppunten));
-            
             // Process each visited node
             importData.visitedNodes.forEach(nodeData => {
                 try {
                     if (nodeData.osmId) {
-                        console.log('Processing node:', nodeData.osmId, 'Already visited:', visitedKnooppunten.has(nodeData.osmId));
                         // Check if already visited
                         if (visitedKnooppunten.has(nodeData.osmId)) {
                             duplicateCount++;
@@ -876,17 +978,23 @@ function handleImportFile(event) {
                             successCount++;
                         }
                     } else {
-                        console.log('Node missing osmId:', nodeData);
                         errorCount++;
                     }
                 } catch (error) {
-                    console.log('Error processing node:', error, nodeData);
                     errorCount++;
                 }
             });
             
             // Save the updated data to localStorage
             saveData();
+            
+            // Clear all markers and force refresh if any nodes were imported
+            if (successCount > 0) {
+                clearAllMarkers();
+                currentBounds = null;
+                lastZoom = null;
+                loadNodesForCurrentView();
+            }
             
             // Update the display
             updateStats();
