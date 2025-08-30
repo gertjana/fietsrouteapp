@@ -1,2 +1,32 @@
+# Data and dependencies
 data/
 node_modules/
+
+# Build output
+dist/
+
+# TypeScript output in source directories (should use dist/ instead)
+server.js
+routes/*.js
+scripts/*.js
+types/*.js
+
+# Logs
+*.log
+npm-debug.log*
+
+# Environment files
+.env
+.env.local
+.env.development
+.env.test
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db

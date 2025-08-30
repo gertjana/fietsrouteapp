@@ -12,6 +12,7 @@ let loadNodesTimeout = null; // For debouncing map movements
 let currentBounds = null; // Track current bounds to avoid reloading same data
 let lastZoom = null; // Track zoom level for clustering updates
 let currentTileLayer = null; // Track current tile layer for theme switching
+let totalNodesInNetherlands = 0; // Total number of cycling nodes in Netherlands for accurate percentage
 
 // Utility functions
 // Calculate distance between two points in meters using Haversine formula
@@ -106,6 +107,22 @@ function loadMapPosition() {
 document.addEventListener('DOMContentLoaded', function() {
     console.log('🚴‍♀️ Starting Nederlandse Fietsknooppunten Tracker...');
     
+    // Register service worker for tile caching
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js')
+            .then(registration => {
+                console.log('✅ Service Worker registered for tile caching');
+                
+                // Clean cache weekly
+                if (registration.active) {
+                    registration.active.postMessage({ type: 'CLEAN_CACHE' });
+                }
+            })
+            .catch(error => {
+                console.warn('⚠️ Service Worker registration failed:', error);
+            });
+    }
+    
     // Check if Leaflet is loaded
     if (typeof L === 'undefined') {
         updateStatus('❌ Kaart bibliotheek niet geladen. Herlaad de pagina.', 'error');
@@ -115,6 +132,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Initialize map and load data for initial view
     initMap().then(() => {
+        loadTotalStats(); // Load total statistics first
         loadNodesForCurrentView();
         // Routes loading is disabled by default to prevent API overload
         // User can enable it manually with the toggle button
@@ -146,8 +164,8 @@ async function initMap() {
             preferCanvas: true // Better performance for many markers
         });
         
-        // Initialize with OpenCycleMap as default
-        currentTileLayer = L.tileLayer('https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png', {
+        // Initialize with standard OpenStreetMap tiles
+        currentTileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
             maxZoom: 18
         });
@@ -873,11 +891,36 @@ function removeVisited(osmId) {
     }
 }
 
+// Load total statistics from API
+async function loadTotalStats() {
+    try {
+        const response = await fetch('/api/stats');
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const stats = await response.json();
+        totalNodesInNetherlands = stats.totalNodes;
+        console.log(`📊 Total cycling nodes in Netherlands: ${totalNodesInNetherlands}`);
+        
+        // Update stats display immediately
+        updateStats();
+        
+    } catch (error) {
+        console.error('❌ Failed to load total stats:', error);
+        // If we can't load total stats, fallback to old behavior (using loaded nodes)
+        totalNodesInNetherlands = 0;
+    }
+}
+
 // Update statistics
 function updateStats() {
     const knooppuntenCount = visitedKnooppunten.size;
     const loadedCount = knooppunten.size;
-    const completionRate = loadedCount > 0 ? Math.round((knooppuntenCount / loadedCount) * 100) : 0;
+    
+    // Use total nodes in Netherlands if available, otherwise fall back to loaded nodes
+    const totalForPercentage = totalNodesInNetherlands > 0 ? totalNodesInNetherlands : loadedCount;
+    const completionRate = totalForPercentage > 0 ? Math.round((knooppuntenCount / totalForPercentage) * 100) : 0;
     
     document.getElementById('totalKnooppunten').textContent = knooppuntenCount;
     document.getElementById('loadedCount').textContent = loadedCount;
@@ -885,7 +928,13 @@ function updateStats() {
     const progressFill = document.getElementById('progressFill');
     const displayRate = Math.min(100, completionRate);
     progressFill.style.width = displayRate + '%';
-    progressFill.textContent = displayRate + '%';
+    
+    // Show total nodes info in percentage text when using Netherlands total
+    if (totalNodesInNetherlands > 0) {
+        progressFill.textContent = `${displayRate}% (${knooppuntenCount}/${totalNodesInNetherlands})`;
+    } else {
+        progressFill.textContent = displayRate + '%';
+    }
 }
 
 // Draw route lines on map

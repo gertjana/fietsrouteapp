@@ -3,10 +3,12 @@
  * Groups nearby nodes into clusters at different zoom levels
  */
 
+import { CyclingNode, NodeCluster, ClusteringResult } from '../types';
+
 /**
  * Calculate distance between two geographic points in kilometers
  */
-function getDistance(lat1, lng1, lat2, lng2) {
+function getDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
     const R = 6371; // Earth's radius in km
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLng = (lng2 - lng1) * Math.PI / 180;
@@ -21,14 +23,14 @@ function getDistance(lat1, lng1, lat2, lng2) {
  * Calculate appropriate cluster distance based on zoom level
  * Only cluster at zoom 10 or lower, show individual nodes at zoom 11+
  */
-function getClusterDistance(zoom) {
+function getClusterDistance(zoom: number): number {
     // No clustering at zoom 11 or higher - show individual nodes
     if (zoom >= 11) {
         return 0;
     }
     
     // Zoom levels and corresponding cluster distances in km (only for zoom 10 and below)
-    const zoomDistances = {
+    const zoomDistances: Record<number, number> = {
         0: 100,   // Country level - very large clusters
         3: 75,    // Large region level - large clusters
         5: 50,    // Province level - medium clusters  
@@ -49,7 +51,7 @@ function getClusterDistance(zoom) {
 /**
  * Calculate zoom level from bounding box area
  */
-function calculateZoomFromBounds(south, west, north, east) {
+function calculateZoomFromBounds(south: number, west: number, north: number, east: number): number {
     const latDiff = north - south;
     const lngDiff = east - west;
     const area = latDiff * lngDiff;
@@ -67,37 +69,35 @@ function calculateZoomFromBounds(south, west, north, east) {
 /**
  * Cluster nodes using a simple distance-based algorithm
  */
-function clusterNodes(nodes, zoom) {
+function clusterNodes(nodes: CyclingNode[], zoom: number): NodeCluster[] {
     const clusterDistance = getClusterDistance(zoom);
     
     // If cluster distance is 0, return all individual nodes
     if (clusterDistance === 0) {
         return nodes.map(node => ({
-            type: 'node',
             id: node.id,
             lat: node.lat,
             lng: node.lng,
             osmId: node.osmId,
             name: node.name,
-            network: node.network,
-            count: 1
+            nodes: [node],
+            count: 1,
+            isCluster: false,
+            type: 'node'  // Add type for frontend compatibility
         }));
     }
     
-    const clusters = [];
-    const used = new Set();
+    const clusters: NodeCluster[] = [];
+    const used = new Set<number>();
     
     for (let i = 0; i < nodes.length; i++) {
         if (used.has(i)) continue;
         
         const centerNode = nodes[i];
-        const cluster = {
-            type: 'cluster',
-            lat: centerNode.lat,
-            lng: centerNode.lng,
-            nodes: [centerNode],
-            count: 1
-        };
+        const clusterNodes: CyclingNode[] = [centerNode];
+        let clusterLat = centerNode.lat;
+        let clusterLng = centerNode.lng;
+        let count = 1;
         
         used.add(i);
         
@@ -109,42 +109,40 @@ function clusterNodes(nodes, zoom) {
             const distance = getDistance(centerNode.lat, centerNode.lng, node.lat, node.lng);
             
             if (distance <= clusterDistance) {
-                cluster.nodes.push(node);
-                cluster.count++;
+                clusterNodes.push(node);
+                count++;
                 used.add(j);
                 
                 // Update cluster center to average position
-                cluster.lat = cluster.nodes.reduce((sum, n) => sum + n.lat, 0) / cluster.nodes.length;
-                cluster.lng = cluster.nodes.reduce((sum, n) => sum + n.lng, 0) / cluster.nodes.length;
+                clusterLat = clusterNodes.reduce((sum, n) => sum + n.lat, 0) / clusterNodes.length;
+                clusterLng = clusterNodes.reduce((sum, n) => sum + n.lng, 0) / clusterNodes.length;
             }
         }
         
         // Add cluster or individual node
-        if (cluster.count === 1) {
+        if (count === 1) {
             // Single node - return as individual node
             clusters.push({
-                type: 'node',
                 id: centerNode.id,
                 lat: centerNode.lat,
                 lng: centerNode.lng,
                 osmId: centerNode.osmId,
                 name: centerNode.name,
-                network: centerNode.network,
-                count: 1
+                nodes: [centerNode],
+                count: 1,
+                isCluster: false,
+                type: 'node'  // Add type for frontend compatibility
             });
         } else {
             // Multiple nodes - return as cluster
             clusters.push({
-                type: 'cluster',
                 id: `cluster_${clusters.length}`,
-                lat: cluster.lat,
-                lng: cluster.lng,
-                count: cluster.count,
-                nodes: cluster.nodes.map(n => ({ 
-                    id: n.id, 
-                    name: n.name, 
-                    osmId: n.osmId // Include osmId for unique identification
-                }))
+                lat: clusterLat,
+                lng: clusterLng,
+                nodes: clusterNodes,
+                count: count,
+                isCluster: true,
+                type: 'cluster'  // Add type for frontend compatibility
             });
         }
     }
@@ -155,24 +153,28 @@ function clusterNodes(nodes, zoom) {
 /**
  * Main clustering function for API use
  */
-function clusterNodesForBounds(nodes, south, west, north, east, explicitZoom = null) {
+export function clusterNodesForBounds(
+    nodes: CyclingNode[], 
+    south: number, 
+    west: number, 
+    north: number, 
+    east: number, 
+    explicitZoom: number | null = null
+): ClusteringResult {
     const zoom = explicitZoom !== null ? explicitZoom : calculateZoomFromBounds(south, west, north, east);
     const clusters = clusterNodes(nodes, zoom);
-    
-    // console.log(`🎯 Clustered ${nodes.length} nodes into ${clusters.length} items at zoom ${zoom} (distance: ${getClusterDistance(zoom)}km)`);
     
     return {
         clusters: clusters,
         zoom: zoom,
         clusterDistance: getClusterDistance(zoom),
         originalNodeCount: nodes.length,
-        clusterCount: clusters.filter(c => c.type === 'cluster').length,
-        individualNodeCount: clusters.filter(c => c.type === 'node').length
+        clusterCount: clusters.filter(c => c.isCluster).length,
+        individualNodeCount: clusters.filter(c => !c.isCluster).length
     };
 }
 
-module.exports = {
-    clusterNodesForBounds,
+export {
     calculateZoomFromBounds,
     getClusterDistance,
     clusterNodes
