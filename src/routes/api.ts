@@ -506,4 +506,11 @@ router.get('/cache/status', (req: Request, res: Response): void => {
     });
 });
 
+/**
+ * Health check endpoint
+ */
+router.get('/health', (req: Request, res: Response): void => {
+    res.status(200).end();
+});
+
 export default router;
