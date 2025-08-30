@@ -123,6 +123,41 @@ npm run dev        # Start development server met nodemon
 npm run download   # Download/update Nederlandse knooppunten data
 ```
 
+## 🐳 Docker Deployment
+
+Voor een eenvoudige deployment in een kleine container:
+
+### Option 1: Docker Compose (Aanbevolen)
+
+```bash
+# Build en start de container
+npm run docker:compose
+
+# Voor productie (detached mode)
+npm run docker:compose:prod
+```
+
+### Option 2: Manual Docker
+
+```bash
+# Build de image
+npm run docker:build
+
+# Run de container
+npm run docker:run
+```
+
+### Docker Features
+
+- **Multi-stage build** voor minimale image grootte (~50MB)
+- **Alpine Linux** basis voor security en grootte
+- **Non-root user** voor veiligheid
+- **Health checks** voor monitoring
+- **Resource limits** voor kleine deployments (256MB RAM max)
+- **Signal handling** met dumb-init
+
+De applicatie is toegankelijk op `http://localhost:3000`
+
 ### Cache Management
 
 - Cache wordt automatisch beheerd
