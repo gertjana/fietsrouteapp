@@ -114,16 +114,6 @@ export interface ClusteringResult {
     individualNodeCount: number;
 }
 
-// Clustering result types
-export interface ClusteringResult {
-    clusters: NodeCluster[];
-    zoom: number;
-    clusterDistance: number;
-    originalNodeCount: number;
-    clusterCount: number;
-    individualNodeCount: number;
-}
-
 // Extend Leaflet types for custom markers
 declare global {
     namespace L {

@@ -1,9 +1,10 @@
 # Nederlandse Fietsknooppunten Tracker 🚴‍♀️
 
-Een moderne web applicatie om Nederlandse fietsknooppunten te verkennen en je bezochte knooppunten bij te houden. Gebouwd met Node.js, Express en Leaflet.js, gebruikmakend van lokale OpenStreetMap data.
+Een moderne web applicatie om Nederlandse fietsknooppunten te verkennen en je bezochte knooppunten bij te houden. Gebouwd met **TypeScript**, Node.js, Express en Leaflet.js, gebruikmakend van lokale OpenStreetMap data.
 
 ## ✨ Features
 
+- **TypeScript backend** - Type-safe server code met modern development
 - **Interactieve kaart** met alle Nederlandse fietsknooppunten
 - **Click-to-toggle** bezocht status - klik direct op knooppunten
 - **Lokale data** - snelle loading zonder API beperkingen
@@ -22,7 +23,13 @@ cd fietsrouteapp
 npm install
 ```
 
-### 2. Data Downloaden (Eerste keer)
+### 2. Build TypeScript
+
+```bash
+npm run build
+```
+
+### 3. Data Downloaden (Eerste keer)
 
 **Belangrijk**: Voor de eerste keer moet je de Nederlandse fietsknooppunten data downloaden:
 
@@ -115,11 +122,18 @@ Dit overschrijft je huidige data met de nieuwste versie van OpenStreetMap.
 
 ## 🛠️ Development
 
+### TypeScript Architecture
+
+- **Source code**: `src/` directory (TypeScript)
+- **Compiled output**: `dist/` directory (JavaScript)
+- **Frontend**: `public/` directory (HTML/CSS/JS)
+
 ### Scripts
 
 ```bash
-npm start          # Start productie server
-npm run dev        # Start development server met nodemon
+npm run build      # Compile TypeScript to JavaScript
+npm start          # Start production server (requires build first)
+npm run dev        # Development: build + start with nodemon
 npm run download   # Download/update Nederlandse knooppunten data
 ```
 
