@@ -1,7 +1,7 @@
 import express, { Request, Response, Router } from 'express';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { clusterNodesForBounds } from './clustering';
+import { clusterNodesForBounds } from './clustering.ts';
 import { 
     CyclingNode, 
     NodeCluster, 
