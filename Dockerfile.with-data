@@ -24,7 +24,7 @@ RUN npm ci --only=production && npm cache clean --force
 COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
 COPY --from=builder --chown=nodejs:nodejs /app/public ./public
 
-# Copy data directory (will be populated by GitHub Action)
+# Copy data directory and ensure proper structure
 COPY --chown=nodejs:nodejs data ./data
 
 USER nodejs

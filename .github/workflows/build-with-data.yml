@@ -126,6 +126,28 @@ jobs:
       run: |
         # Use specific dockerignore for data-included build
         cp .dockerignore.with-data .dockerignore
+        
+        # Ensure data directory exists with correct structure for Docker build
+        mkdir -p data/chunks
+        
+        # Verify data structure before Docker build
+        echo "📂 Verifying data structure for Docker build:"
+        echo "Current working directory: $(pwd)"
+        echo "Contents of data directory:"
+        if [ -d "data" ]; then
+          ls -la data/
+          echo "Contents of data/chunks directory:"
+          if [ -d "data/chunks" ]; then
+            echo "Chunk files count: $(ls data/chunks/ | wc -l)"
+            ls data/chunks/ | head -5
+          else
+            echo "❌ No chunks directory found"
+          fi
+        else
+          echo "❌ No data directory found - creating empty structure"
+          mkdir -p data/chunks
+          echo "Created empty data structure for Docker build"
+        fi
 
     - name: Build and push Docker image
       uses: docker/build-push-action@v5
