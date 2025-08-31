@@ -121,6 +121,7 @@ jobs:
           type=ref,event=pr
           type=schedule,pattern={{date 'YYYYMMDD'}}
           type=raw,value=latest,enable={{is_default_branch}}
+          type=sha,prefix={{branch}}-,format=short
 
     - name: Prepare Docker build context
       run: |
