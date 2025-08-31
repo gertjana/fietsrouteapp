@@ -87,6 +87,11 @@ export interface CyclingRoute {
     geometry: Array<{ lat: number; lng: number }>;
     distance?: number;
     difficulty?: string;
+    // Additional fields for frontend compatibility
+    network?: string;
+    wayId?: number;
+    relationId?: number;
+    tags?: { [key: string]: any };
 }
 
 export interface RouteChunk {

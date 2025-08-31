@@ -142,7 +142,7 @@ async function downloadChunk(chunk: { id: string; bbox: [number, number, number,
             
             const data: any = response.data;
             const nodes: CyclingNode[] = (data.elements || []).map((element: any) => ({
-                id: element.id.toString(),
+                id: `node-${element.id}`, // Consistent prefix for node IDs
                 lat: element.lat,
                 lng: element.lon,
                 osmId: element.id.toString(),
@@ -229,13 +229,18 @@ async function downloadRoutesChunk(chunk: { id: string; bbox: [number, number, n
                     }
                     
                     return {
-                        id: element.id.toString(),
+                        id: `route-${element.id}`, // Consistent prefix for route IDs
                         name: element.tags?.name || element.tags?.ref || `Route ${element.id}`,
                         description: element.tags?.description,
                         geometry: geometry,
                         distance: element.tags?.distance ? parseFloat(element.tags.distance) : undefined,
-                        difficulty: element.tags?.difficulty
-                    };
+                        difficulty: element.tags?.difficulty,
+                        // Add compatibility fields for frontend
+                        network: element.tags?.network || 'rcn',
+                        wayId: element.type === 'way' ? element.id : undefined,
+                        relationId: element.type === 'relation' ? element.id : undefined,
+                        tags: element.tags || {}
+                    } as any; // Cast to any to allow extra fields
                 })
                 .filter((route: CyclingRoute) => route.geometry.length > 0); // Only include routes with geometry
             

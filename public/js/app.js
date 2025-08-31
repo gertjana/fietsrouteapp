@@ -467,10 +467,10 @@ function drawOsmRoutes() {
             // Create popup with route information
             const routeInfo = `
                 <div style="min-width: 200px;">
-                    <strong>${route.name || `Route ${route.relationId}`}</strong><br>
-                    <small>Netwerk: ${route.network.toUpperCase()}</small><br>
-                    <small>Way ID: ${route.wayId}</small><br>
-                    <small>Relation ID: ${route.relationId}</small><br>
+                    <strong>${route.name || `Route ${route.relationId || route.wayId || route.id}`}</strong><br>
+                    ${route.network ? `<small>Netwerk: ${route.network.toUpperCase()}</small><br>` : ''}
+                    ${route.wayId ? `<small>Way ID: ${route.wayId}</small><br>` : ''}
+                    ${route.relationId ? `<small>Relation ID: ${route.relationId}</small><br>` : ''}
                     ${route.tags?.highway ? `<small>Type: ${route.tags.highway}</small><br>` : ''}
                     ${route.tags?.surface ? `<small>Oppervlak: ${route.tags.surface}</small><br>` : ''}
                     ${route.tags?.lit ? `<small>Verlichting: ${route.tags.lit}</small><br>` : ''}
