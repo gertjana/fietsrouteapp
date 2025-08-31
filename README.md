@@ -139,9 +139,19 @@ npm run download   # Download/update Nederlandse knooppunten data
 
 ## 🐳 Docker Deployment
 
-Voor een eenvoudige deployment in een kleine container:
+### Option 1: Pre-built Images from GitHub (Aanbevolen)
 
-### Option 1: Docker Compose (Aanbevolen)
+We build ready-to-use Docker images with data included via GitHub Actions:
+
+```bash
+# Run image with data included (weekly updated)
+docker run -p 3000:3000 ghcr.io/gertjana/fietsrouteapp:latest
+
+# Or run without pre-downloaded data (smaller image)
+docker run -p 3000:3000 ghcr.io/gertjana/fietsrouteapp:nodata
+```
+
+### Option 2: Docker Compose (Local Build)
 
 ```bash
 # Build en start de container
@@ -151,7 +161,7 @@ npm run docker:compose
 npm run docker:compose:prod
 ```
 
-### Option 2: Manual Docker
+### Option 3: Manual Docker Build
 
 ```bash
 # Build de image
@@ -161,12 +171,26 @@ npm run docker:build
 npm run docker:run
 ```
 
+### GitHub Actions Builds
+
+We provide two automated builds:
+
+1. **With Data** (`latest` tag): 
+   - Downloads fresh OpenStreetMap data weekly
+   - Self-contained image ready to run
+   - Larger image (~100-200MB) but no setup needed
+
+2. **No Data** (`nodata` tag):
+   - Minimal image (~50MB)
+   - Requires running `npm run download` after start
+   - Good for development or custom data sources
+
 ### Docker Features
 
-- **Multi-stage build** voor minimale image grootte (~50MB)
-- **Alpine Linux** basis voor security en grootte
+- **Multi-stage build** voor minimale image grootte
+- **Alpine Linux** basis voor security en grootte  
 - **Non-root user** voor veiligheid
-- **Health checks** voor monitoring
+- **Health checks** voor monitoring (`/api/health`)
 - **Resource limits** voor kleine deployments (256MB RAM max)
 - **Signal handling** met dumb-init
 
