@@ -41,9 +41,27 @@ jobs:
     - name: Create data directory
       run: mkdir -p data
 
+    - name: Get current week for cache key
+      id: date
+      run: echo "week=$(date +'%Y-W%U')" >> $GITHUB_OUTPUT
+
+    - name: Cache cycling nodes data
+      id: cache-nodes
+      uses: actions/cache@v4
+      with:
+        path: |
+          data/chunks/nodes-chunk-*.json
+          data/nodes-chunk-index.json
+          data/raw-nodes-data.json
+        key: cycling-nodes-${{ steps.date.outputs.week }}-v1
+        restore-keys: |
+          cycling-nodes-${{ steps.date.outputs.week }}-
+          cycling-nodes-
+
     - name: Download cycling nodes data
+      if: steps.cache-nodes.outputs.cache-hit != 'true'
       run: |
-        echo "🚴‍♀️ Starting download of Dutch cycling nodes from OpenStreetMap..."
+        echo "🚴‍♀️ Cache miss - Starting download of Dutch cycling nodes from OpenStreetMap..."
         echo "Current directory: $(pwd)"
         echo "Node version: $(node --version)"
         echo "NPM version: $(npm --version)"
@@ -54,8 +72,8 @@ jobs:
         echo "Download completed, checking results..."
         if [ -d "data/chunks" ]; then
           echo "✅ Chunks directory exists"
-          echo "Number of chunk files: $(ls data/chunks/ | wc -l)"
-          ls -la data/chunks/ | head -10
+          echo "Number of node chunk files: $(ls data/chunks/nodes-chunk-*.json 2>/dev/null | wc -l)"
+          ls -la data/chunks/nodes-chunk-*.json 2>/dev/null | head -5
         else
           echo "❌ No chunks directory found - download failed"
           exit 1
@@ -63,9 +81,29 @@ jobs:
       env:
         NODE_ENV: production
 
-    - name: Download cycling routes data
+    - name: Verify cached nodes data
+      if: steps.cache-nodes.outputs.cache-hit == 'true'
       run: |
-        echo "🛣️ Starting download of Dutch cycling routes from OpenStreetMap..."
+        echo "✅ Using cached cycling nodes data"
+        echo "Number of cached node chunk files: $(ls data/chunks/nodes-chunk-*.json 2>/dev/null | wc -l)"
+
+    - name: Cache cycling routes data
+      id: cache-routes
+      uses: actions/cache@v4
+      with:
+        path: |
+          data/chunks/routes-chunk-*.json
+          data/route-chunk-index.json
+          data/raw-routes-data.json
+        key: cycling-routes-${{ steps.date.outputs.week }}-v1
+        restore-keys: |
+          cycling-routes-${{ steps.date.outputs.week }}-
+          cycling-routes-
+
+    - name: Download cycling routes data
+      if: steps.cache-routes.outputs.cache-hit != 'true'
+      run: |
+        echo "🛣️ Cache miss - Starting download of Dutch cycling routes from OpenStreetMap..."
         timeout 1800 npm run download:routes || {
           echo "⚠️ Routes download failed or timed out, continuing without routes"
           echo "This is non-critical, app will work without routes"
@@ -73,20 +111,40 @@ jobs:
       env:
         NODE_ENV: production
 
+    - name: Verify cached routes data
+      if: steps.cache-routes.outputs.cache-hit == 'true'
+      run: |
+        echo "✅ Using cached cycling routes data"
+        echo "Number of cached route chunk files: $(ls data/chunks/routes-chunk-*.json 2>/dev/null | wc -l)"
+
     - name: Verify data files
       run: |
         echo "📊 Data download summary:"
+        echo "Cache status:"
+        echo "  - Nodes cache hit: ${{ steps.cache-nodes.outputs.cache-hit }}"
+        echo "  - Routes cache hit: ${{ steps.cache-routes.outputs.cache-hit }}"
+        echo ""
+        
         if [ -d "data" ]; then
           echo "Data directory size: $(du -sh data/ | cut -f1)"
           echo "Files in data directory:"
           ls -la data/
           
+          echo ""
+          echo "Chunk files summary:"
+          echo "  - Node chunks: $(ls data/chunks/nodes-chunk-*.json 2>/dev/null | wc -l)"
+          echo "  - Route chunks: $(ls data/chunks/routes-chunk-*.json 2>/dev/null | wc -l)"
+          
           if [ -f "data/nodes-chunk-index.json" ]; then
-            echo "✅ Chunk index found"
-            echo "Chunk index content:"
-            head -20 data/nodes-chunk-index.json
+            echo "✅ Node chunk index found"
           else
-            echo "❌ No chunk index found"
+            echo "❌ No node chunk index found"
+          fi
+          
+          if [ -f "data/route-chunk-index.json" ]; then
+            echo "✅ Route chunk index found"
+          else
+            echo "⚠️ No route chunk index found"
           fi
           
           if [ -d "data/chunks" ]; then
