@@ -43,20 +43,32 @@ jobs:
 
     - name: Download cycling nodes data
       run: |
-        echo "🚴‍♀️ Downloading Dutch cycling nodes from OpenStreetMap..."
-        timeout 1800 npm run download:nodes || {
-          echo "⚠️ Download took longer than 30 minutes, continuing with partial data"
-          exit 0
-        }
+        echo "🚴‍♀️ Starting download of Dutch cycling nodes from OpenStreetMap..."
+        echo "Current directory: $(pwd)"
+        echo "Node version: $(node --version)"
+        echo "NPM version: $(npm --version)"
+        
+        echo "Starting nodes download (this will rebuild TypeScript first)..."
+        timeout 1800 npm run download
+        
+        echo "Download completed, checking results..."
+        if [ -d "data/chunks" ]; then
+          echo "✅ Chunks directory exists"
+          echo "Number of chunk files: $(ls data/chunks/ | wc -l)"
+          ls -la data/chunks/ | head -10
+        else
+          echo "❌ No chunks directory found - download failed"
+          exit 1
+        fi
       env:
         NODE_ENV: production
 
     - name: Download cycling routes data
       run: |
-        echo "🛣️ Downloading Dutch cycling routes from OpenStreetMap..."
+        echo "🛣️ Starting download of Dutch cycling routes from OpenStreetMap..."
         timeout 1800 npm run download:routes || {
-          echo "⚠️ Routes download took longer than 30 minutes, continuing without routes"
-          exit 0
+          echo "⚠️ Routes download failed or timed out, continuing without routes"
+          echo "This is non-critical, app will work without routes"
         }
       env:
         NODE_ENV: production
@@ -68,8 +80,22 @@ jobs:
           echo "Data directory size: $(du -sh data/ | cut -f1)"
           echo "Files in data directory:"
           ls -la data/
+          
+          if [ -f "data/nodes-chunk-index.json" ]; then
+            echo "✅ Chunk index found"
+            echo "Chunk index content:"
+            head -20 data/nodes-chunk-index.json
+          else
+            echo "❌ No chunk index found"
+          fi
+          
           if [ -d "data/chunks" ]; then
-            echo "Chunk files: $(ls data/chunks/ | wc -l)"
+            echo "✅ Chunks directory found"
+            echo "Number of chunk files: $(ls data/chunks/ | wc -l)"
+            echo "Sample chunk files:"
+            ls data/chunks/ | head -5
+          else
+            echo "❌ No chunks directory found"
           fi
         else
           echo "⚠️ No data directory found"

@@ -8,6 +8,7 @@
     "dev": "npm run build && nodemon dist/server.js",
     "build": "tsc",
     "build:watch": "tsc --watch",
+    "download": "npm run build && node dist/scripts/download-all-nodes.js",
     "download:nodes": "node dist/scripts/download-all-nodes.js",
     "download:routes": "node dist/scripts/download-all-nodes.js routes",
     "test": "echo \"Error: no test specified\" && exit 1",
