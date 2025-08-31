@@ -2,9 +2,6 @@
 node_modules
 npm-debug.log*
 
-# Build outputs (will be copied from builder stage)
-dist
-
 # Development files
 *.md
 .git
