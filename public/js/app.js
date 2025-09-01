@@ -304,15 +304,21 @@ async function loadNodesForCurrentView() {
         
         for (const item of items) {
             if (item.lat && item.lng) {
-                if (item.type === 'cluster') {
-                    // Add cluster marker
+                if (item.type === 'cluster' && item.isCluster === true) {
+                    // Add cluster marker for true clusters
                     addClusterToMap(item);
                     addedCount++;
-                } else {
-                    // Add individual node (either from cluster endpoint or legacy)
+                } else if (item.type === 'node' || item.osmId) {
+                    // Add individual node (either wrapped in cluster structure or direct)
                     if (item.osmId) {
-                        knooppunten.set(item.osmId, item);
-                        addKnooppuntToMap(item);
+                        // For wrapped nodes, use the data from the nodes array if available
+                        let nodeData = item;
+                        if (item.nodes && item.nodes.length > 0 && item.nodes[0].ref) {
+                            // Extract the actual node data with ref field
+                            nodeData = { ...item, ...item.nodes[0] };
+                        }
+                        knooppunten.set(item.osmId, nodeData);
+                        addKnooppuntToMap(nodeData);
                         addedCount++;
                     }
                 }
@@ -605,8 +611,9 @@ async function loadFallbackData() {
 
 // Add cycling node marker to map
 function addKnooppuntToMap(knooppunt) {
-    // Use OSM ID for unique identification, but show node number
-    const markerHtml = `<div class="knooppunt-marker" data-osm-id="${knooppunt.osmId}" data-node-id="${knooppunt.id}">${knooppunt.id}</div>`;
+    // Use OSM ID for unique identification, but show node reference number
+    const displayNumber = knooppunt.ref || knooppunt.osmId || knooppunt.id;
+    const markerHtml = `<div class="knooppunt-marker" data-osm-id="${knooppunt.osmId}" data-node-id="${knooppunt.id}">${displayNumber}</div>`;
     
     const marker = L.marker([knooppunt.lat, knooppunt.lng], {
         icon: L.divIcon({
@@ -626,14 +633,14 @@ function addKnooppuntToMap(knooppunt) {
     
     const tooltipContent = `
         <div style="text-align: center; min-width: 160px;">
-            <strong>${knooppunt.name}</strong><br>
+            <strong>${knooppunt.name || `Node ${knooppunt.ref || knooppunt.osmId}`}</strong><br>
+            ${knooppunt.ref ? `<small>Knooppunt: ${knooppunt.ref}</small><br>` : ''}
             <small>OSM ID: ${knooppunt.osmId}</small><br>
             ${groupInfo}
             <small>Netwerk: ${knooppunt.network}</small><br>
             ${knooppunt.addr_city || knooppunt.addr_village ? `<small>📍 ${knooppunt.addr_city || knooppunt.addr_village}</small><br>` : ''}
             <small>${knooppunt.lat.toFixed(4)}, ${knooppunt.lng.toFixed(4)}</small>
-        </div>
-    `;
+        </div>`;
     
     marker.bindTooltip(tooltipContent, {
         permanent: false,
