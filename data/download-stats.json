@@ -1,0 +1,16 @@
+{
+  "chunksTotal": 64,
+  "chunksCompleted": 63,
+  "nodesTotal": 18279,
+  "requestsTotal": 64,
+  "retriesTotal": 0,
+  "startTime": "2025-08-27T19:14:43.696Z",
+  "errors": [
+    {
+      "chunk": "Chunk 36/64",
+      "error": "timeout of 45000ms exceeded",
+      "timestamp": "2025-08-27T19:20:02.109Z",
+      "retryCount": 0
+    }
+  ]
+}

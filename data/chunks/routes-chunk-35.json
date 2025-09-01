@@ -1,0 +1,12 @@
+{
+  "chunkId": 35,
+  "routes": [],
+  "bounds": [
+    52.2,
+    4.225,
+    52.575,
+    4.7375
+  ],
+  "error": "Request failed with status code 504",
+  "timestamp": "2025-08-27T19:28:25.552Z"
+}

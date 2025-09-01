@@ -271,8 +271,8 @@ async function main(): Promise<void> {
     try {
         // Check command line arguments
         const args = process.argv.slice(2);
-        const downloadRoutes = args.includes('routes');
-        const downloadNodes = !downloadRoutes || args.includes('nodes');
+        const downloadRoutes = args.includes('routes') || (args.length === 0);
+        const downloadNodes = args.includes('nodes') || (args.length === 0);
         
         if (downloadRoutes && !downloadNodes) {
             log('�️ Starting Dutch cycling routes download...');

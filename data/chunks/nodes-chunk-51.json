@@ -1,0 +1,58 @@
+{
+  "id": 51,
+  "name": "Chunk 51/64",
+  "bounds": [
+    52.95,
+    4.225,
+    53.325,
+    4.7375
+  ],
+  "nodes": [
+    {
+      "id": 5,
+      "lat": 53.0411125,
+      "lng": 4.7364477,
+      "osmId": 47808915,
+      "name": "Knooppunt 5",
+      "description": null,
+      "note": null,
+      "operator": null,
+      "network": "rcn",
+      "ref": "05",
+      "place": null,
+      "addr_city": null,
+      "addr_village": null,
+      "_chunk": 51,
+      "_bounds": [
+        52.95,
+        4.225,
+        53.325,
+        4.7375
+      ]
+    },
+    {
+      "id": 11,
+      "lat": 53.0345138,
+      "lng": 4.7371737,
+      "osmId": 991725236,
+      "name": "Knooppunt 11",
+      "description": null,
+      "note": null,
+      "operator": null,
+      "network": "rcn",
+      "ref": "11",
+      "place": null,
+      "addr_city": null,
+      "addr_village": null,
+      "_chunk": 51,
+      "_bounds": [
+        52.95,
+        4.225,
+        53.325,
+        4.7375
+      ]
+    }
+  ],
+  "count": 2,
+  "downloadDate": "2025-08-27T19:21:03.743Z"
+}
