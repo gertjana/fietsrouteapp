@@ -2,6 +2,7 @@ import express, { Request, Response, Router } from 'express';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { clusterNodesForBounds } from './clustering';
+import { visitedRouter } from './visited';
 import { 
     CyclingNode, 
     NodeCluster, 
@@ -15,6 +16,9 @@ import {
 } from '../types';
 
 const router: Router = express.Router();
+
+// Mount visited nodes routes
+router.use('/visited', visitedRouter);
 
 // Configuration
 const DATA_DIR = path.join(process.cwd(), 'data');

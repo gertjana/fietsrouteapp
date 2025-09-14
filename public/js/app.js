@@ -1,6 +1,7 @@
 // Global variables
 let map;
-let visitedKnooppunten = new Set();
+let visitedKnooppunten = new Set(); // For backward compatibility and quick lookups
+let visitedNodeDetails = new Map(); // Store full node details when first visited
 let knooppunten = new Map();
 let markers = new Map();
 let osmRoutes = []; // Store actual OSM routes
@@ -803,6 +804,7 @@ function toggleKnooppuntVisited(id) {
         // Remove all grouped nodes from visited
         groupedNodes.forEach(node => {
             visitedKnooppunten.delete(node.osmId);
+            visitedNodeDetails.delete(node.osmId); // Also remove from detailed storage
             updateMarkerStyle(node.osmId);
         });
         updateStatus(`📍 Knooppunt ${clickedNode.id} (${groupedNodes.length} nodes) gemarkeerd als niet bezocht`, 'info');
@@ -810,6 +812,14 @@ function toggleKnooppuntVisited(id) {
         // Add all grouped nodes to visited
         groupedNodes.forEach(node => {
             visitedKnooppunten.add(node.osmId);
+            // Store full node details for future export
+            visitedNodeDetails.set(node.osmId, {
+                knooppuntNumber: node.id,
+                name: node.name,
+                osmId: node.osmId,
+                coordinates: [node.lat, node.lng],
+                visitedDate: new Date().toISOString()
+            });
             updateMarkerStyle(node.osmId);
         });
         updateStatus(`✅ Knooppunt ${clickedNode.id} (${groupedNodes.length} nodes) gemarkeerd als bezocht`, 'success');
@@ -957,26 +967,64 @@ function exportVisited() {
         return;
     }
     
-    // Get visited nodes and sort by node number
-    const visitedNodes = Array.from(visitedKnooppunten).map(osmId => {
-        const node = knooppunten.get(osmId);
-        if (!node) {
-            console.log('WARNING: Node not found for osmId:', osmId);
+    // Handle legacy data: if we have visited nodes but no details, try to populate from current map
+    if (visitedKnooppunten.size > visitedNodeDetails.size) {
+        console.log('⚠️ Found legacy visited nodes without details, attempting to populate...');
+        for (const osmId of visitedKnooppunten) {
+            if (!visitedNodeDetails.has(osmId)) {
+                const node = knooppunten.get(osmId);
+                if (node) {
+                    visitedNodeDetails.set(osmId, {
+                        knooppuntNumber: node.id,
+                        name: node.name,
+                        osmId: node.osmId,
+                        coordinates: [node.lat, node.lng],
+                        visitedDate: new Date().toISOString() // Use current date as fallback
+                    });
+                    console.log(`✅ Populated details for legacy node ${node.id}`);
+                } else {
+                    console.log(`⚠️ Legacy node ${osmId} not currently loaded, will export with minimal data`);
+                }
+            }
         }
-        return node;
-    }).filter(node => node).sort((a, b) => a.id - b.id);
+        // Save the updated details
+        saveData();
+    }
     
-    console.log('Found visited nodes for export:', visitedNodes.length);
+    // Get all visited nodes from stored details
+    const allVisitedNodes = Array.from(visitedNodeDetails.values());
+    
+    // Add minimal data for any remaining nodes that couldn't be populated
+    const missingNodes = [];
+    for (const osmId of visitedKnooppunten) {
+        if (!visitedNodeDetails.has(osmId)) {
+            missingNodes.push({
+                knooppuntNumber: null,
+                name: `Node ${osmId}`,
+                osmId: osmId,
+                coordinates: [0, 0],
+                visitedDate: new Date().toISOString()
+            });
+        }
+    }
+    
+    const combinedNodes = [...allVisitedNodes, ...missingNodes].sort((a, b) => {
+        // Sort by knooppunt number, putting null values at the end
+        if (a.knooppuntNumber === null && b.knooppuntNumber === null) return 0;
+        if (a.knooppuntNumber === null) return 1;
+        if (b.knooppuntNumber === null) return -1;
+        return a.knooppuntNumber - b.knooppuntNumber;
+    });
+    
+    console.log('Total visited nodes for export:', combinedNodes.length);
+    console.log('Visited details map size:', visitedNodeDetails.size);
+    console.log('Visited set size:', visitedKnooppunten.size);
+    console.log('Missing node details:', missingNodes.length);
     
     const exportData = {
         exportDate: new Date().toISOString(),
-        totalVisited: visitedNodes.length,
-        visitedNodes: visitedNodes.map(node => ({
-            knooppuntNumber: node.id,
-            name: node.name,
-            osmId: node.osmId,
-            coordinates: [node.lat, node.lng]
-        }))
+        totalVisited: combinedNodes.length,
+        visitedNodes: combinedNodes
     };
     
     const dataStr = JSON.stringify(exportData, null, 2);
@@ -1010,11 +1058,53 @@ function handleImportFile(event) {
     reader.onload = function(e) {
         try {
             const importData = JSON.parse(e.target.result);
+            console.log('Parsed import data:', importData);
+            console.log('Import data keys:', Object.keys(importData));
+            console.log('visitedNodes exists:', !!importData.visitedNodes);
+            console.log('visitedNodes is array:', Array.isArray(importData.visitedNodes));
             
             // Validate the import data structure
             if (!importData.visitedNodes || !Array.isArray(importData.visitedNodes)) {
+                console.error('Invalid data structure. Expected visitedNodes array, got:', {
+                    hasVisitedNodes: !!importData.visitedNodes,
+                    isArray: Array.isArray(importData.visitedNodes),
+                    type: typeof importData.visitedNodes,
+                    keys: Object.keys(importData)
+                });
                 updateStatus('⚠️ Ongeldig bestandsformaat - geen visitedNodes array gevonden', 'error');
                 return;
+            }
+            
+            console.log('Found visitedNodes array with', importData.visitedNodes.length, 'entries');
+            console.log('Sample entries:', importData.visitedNodes.slice(0, 3));
+            
+            // Check if we have any data loaded yet
+            if (knooppunten.size === 0) {
+                console.error('❌ No nodes loaded yet! knooppunten map is empty. Try again after the map loads.');
+                updateStatus('⚠️ Wacht tot de kaart geladen is voordat je importeert', 'error');
+                return;
+            }
+            
+            // Let's analyze what node numbers we have vs what we're trying to import
+            const currentNodeNumbers = new Set();
+            for (const [osmId, node] of knooppunten) {
+                currentNodeNumbers.add(node.id);
+            }
+            console.log('Current dataset has nodes:', Array.from(currentNodeNumbers).sort((a,b) => a-b).slice(0, 10), '... (showing first 10)');
+            console.log('Current dataset node count:', currentNodeNumbers.size);
+            
+            const importNodeNumbers = importData.visitedNodes.map(n => n.knooppuntNumber).sort((a,b) => a-b);
+            console.log('Trying to import nodes:', importNodeNumbers.slice(0, 10), '... (showing first 10)');
+            console.log('Import node count:', importNodeNumbers.length);
+            
+            // Check how many import nodes exist in current dataset
+            const existingImportNodes = importNodeNumbers.filter(num => currentNodeNumbers.has(num));
+            console.log('Nodes that exist in both datasets:', existingImportNodes.length, '/', importNodeNumbers.length);
+            
+            if (existingImportNodes.length === 0) {
+                console.error('❌ NO OVERLAP between datasets! This suggests they are from completely different areas or data sources.');
+                console.log('Current dataset range:', Math.min(...currentNodeNumbers), '-', Math.max(...currentNodeNumbers));
+                console.log('Import dataset range:', Math.min(...importNodeNumbers), '-', Math.max(...importNodeNumbers));
             }
             
             // Count successful imports
@@ -1023,21 +1113,95 @@ function handleImportFile(event) {
             let errorCount = 0;
             
             // Process each visited node
-            importData.visitedNodes.forEach(nodeData => {
+            console.log('Processing', importData.visitedNodes.length, 'nodes for import');
+            console.log('Current knooppunten map size:', knooppunten.size);
+            
+            importData.visitedNodes.forEach((nodeData, index) => {
+                console.log(`Processing node ${index + 1}/${importData.visitedNodes.length}:`, nodeData);
+                
                 try {
-                    if (nodeData.osmId) {
+                    let foundOsmId = null;
+                    
+                    // Strategy 1: Try direct OSM ID match
+                    if (nodeData.osmId && knooppunten.has(nodeData.osmId)) {
+                        foundOsmId = nodeData.osmId;
+                        console.log(`✅ Direct OSM ID match for node ${nodeData.knooppuntNumber}: ${nodeData.osmId}`);
+                    }
+                    
+                    // Strategy 2: If OSM ID doesn't match, try finding by cycling node number AND location
+                    if (!foundOsmId && nodeData.knooppuntNumber && nodeData.coordinates) {
+                        const [targetLat, targetLng] = nodeData.coordinates;
+                        const threshold = 0.01; // roughly 1km for initial region match
+                        
+                        console.log(`🔍 Searching by node number ${nodeData.knooppuntNumber} near [${targetLat}, ${targetLng}] (OSM ID ${nodeData.osmId} not found)`);
+                        
+                        for (const [osmId, node] of knooppunten) {
+                            if (node.id === nodeData.knooppuntNumber) {
+                                const latDiff = Math.abs(node.lat - targetLat);
+                                const lngDiff = Math.abs(node.lng - targetLng);
+                                
+                                if (latDiff < threshold && lngDiff < threshold) {
+                                    foundOsmId = osmId;
+                                    console.log(`✅ Found by number+location: ${nodeData.knooppuntNumber} → OSM ID ${osmId} (distance: ${latDiff.toFixed(4)}, ${lngDiff.toFixed(4)})`);
+                                    break;
+                                } else {
+                                    console.log(`🚫 Found node ${nodeData.knooppuntNumber} but wrong location: [${node.lat}, ${node.lng}] vs [${targetLat}, ${targetLng}] (distance: ${latDiff.toFixed(4)}, ${lngDiff.toFixed(4)})`);
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Strategy 3: As last resort, try exact coordinate matching (within 100m)
+                    if (!foundOsmId && nodeData.coordinates && nodeData.coordinates.length === 2) {
+                        const [targetLat, targetLng] = nodeData.coordinates;
+                        const threshold = 0.001; // roughly 100m
+                        
+                        console.log(`🔍 Searching by exact coordinates for any node at [${targetLat}, ${targetLng}]`);
+                        for (const [osmId, node] of knooppunten) {
+                            const latDiff = Math.abs(node.lat - targetLat);
+                            const lngDiff = Math.abs(node.lng - targetLng);
+                            
+                            if (latDiff < threshold && lngDiff < threshold) {
+                                foundOsmId = osmId;
+                                console.log(`✅ Found by exact coordinates: any node → OSM ID ${osmId} (lat diff: ${latDiff.toFixed(6)}, lng diff: ${lngDiff.toFixed(6)})`);
+                                break;
+                            }
+                        }
+                    }
+                    
+                    if (foundOsmId) {
                         // Check if already visited
-                        if (visitedKnooppunten.has(nodeData.osmId)) {
+                        if (visitedKnooppunten.has(foundOsmId)) {
                             duplicateCount++;
+                            console.log(`⚠️ Duplicate: node ${nodeData.knooppuntNumber} already visited`);
                         } else {
-                            visitedKnooppunten.add(nodeData.osmId);
+                            visitedKnooppunten.add(foundOsmId);
+                            
+                            // Also add to detailed storage
+                            visitedNodeDetails.set(foundOsmId, {
+                                knooppuntNumber: nodeData.knooppuntNumber,
+                                name: nodeData.name,
+                                osmId: foundOsmId, // Use the matched OSM ID, not the original
+                                coordinates: nodeData.coordinates,
+                                visitedDate: nodeData.visitedDate || new Date().toISOString(),
+                                importedDate: new Date().toISOString()
+                            });
+                            
                             successCount++;
+                            console.log(`✅ Added: node ${nodeData.knooppuntNumber} (OSM ID: ${foundOsmId})`);
+                            
+                            // Log successful match for debugging
+                            if (foundOsmId !== nodeData.osmId) {
+                                console.log(`🔄 OSM ID changed: ${nodeData.osmId} → ${foundOsmId}`);
+                            }
                         }
                     } else {
                         errorCount++;
+                        console.error(`❌ Could not find node ${nodeData.knooppuntNumber} (OSM ID: ${nodeData.osmId}) in current dataset`);
                     }
                 } catch (error) {
                     errorCount++;
+                    console.error('❌ Error processing imported node:', error, nodeData);
                 }
             });
             
@@ -1062,7 +1226,8 @@ function handleImportFile(event) {
                 message += `, ${duplicateCount} waren al bezocht`;
             }
             if (errorCount > 0) {
-                message += `, ${errorCount} foutieve records overgeslagen`;
+                message += `, ${errorCount} knooppunten niet gevonden in huidige dataset`;
+                console.log(`Import summary: ${successCount} added, ${duplicateCount} duplicates, ${errorCount} not found`);
             }
             
             updateStatus(message, 'success');
@@ -1179,10 +1344,35 @@ async function refreshData() {
     updateStatus('✅ Data ververst!', 'success');
 }
 
+// Debug function to check dataset status
+function debugDatasets() {
+    console.log('=== DATASET DEBUG INFO ===');
+    console.log('knooppunten map size:', knooppunten.size);
+    console.log('visitedKnooppunten set size:', visitedKnooppunten.size);
+    
+    if (knooppunten.size > 0) {
+        const nodeNumbers = Array.from(knooppunten.values()).map(n => n.id).sort((a,b) => a-b);
+        console.log('Node number range:', Math.min(...nodeNumbers), '-', Math.max(...nodeNumbers));
+        console.log('First 10 nodes:', nodeNumbers.slice(0, 10));
+        console.log('Last 10 nodes:', nodeNumbers.slice(-10));
+        
+        // Sample a few nodes to see their structure
+        const sample = Array.from(knooppunten.entries()).slice(0, 3);
+        console.log('Sample node structures:', sample);
+    } else {
+        console.log('❌ No nodes loaded! Map might not be initialized yet.');
+    }
+    console.log('=== END DEBUG INFO ===');
+}
+
+// Make it available globally for console use
+window.debugDatasets = debugDatasets;
+
 // Data persistence
 function saveData() {
     const data = {
         visitedKnooppunten: Array.from(visitedKnooppunten),
+        visitedNodeDetails: Array.from(visitedNodeDetails.entries()), // Save the detailed node info
         savedAt: new Date().toISOString()
     };
     
@@ -1201,7 +1391,16 @@ function loadSavedData() {
             
             visitedKnooppunten = new Set(data.visitedKnooppunten || []);
             
+            // Load detailed node info if available (for backward compatibility)
+            if (data.visitedNodeDetails) {
+                visitedNodeDetails = new Map(data.visitedNodeDetails);
+            } else {
+                visitedNodeDetails = new Map(); // Start fresh if no detailed data
+            }
+            
             console.log('✅ Saved data loaded from localStorage');
+            console.log('Loaded visited nodes:', visitedKnooppunten.size);
+            console.log('Loaded node details:', visitedNodeDetails.size);
             updateStatus('💾 Opgeslagen data geladen');
         }
     } catch (error) {
