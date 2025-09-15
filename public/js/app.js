@@ -14,6 +14,7 @@ let currentBounds = null; // Track current bounds to avoid reloading same data
 let lastZoom = null; // Track zoom level for clustering updates
 let currentTileLayer = null; // Track current tile layer for theme switching
 let totalNodesInNetherlands = 0; // Total number of cycling nodes in Netherlands for accurate percentage
+let visibleNodeCount = 0; // Total visible nodes including those in clusters
 
 // Utility functions
 // Calculate distance between two points in meters using Haversine formula
@@ -296,6 +297,7 @@ async function loadNodesForCurrentView() {
         
         // Process clusters and nodes
         let addedCount = 0;
+        visibleNodeCount = 0; // Reset visible node count for current viewport
         const items = data.clusters || data.nodes; // Support both clustered and legacy endpoints
         
         console.log(`🔄 Processing ${items.length} items, zoom: ${data.zoom || 'unknown'}`);
@@ -309,6 +311,8 @@ async function loadNodesForCurrentView() {
                     // Add cluster marker for true clusters
                     addClusterToMap(item);
                     addedCount++;
+                    // Add cluster's node count to visible nodes
+                    visibleNodeCount += item.count || 0;
                 } else if (item.type === 'node' || item.osmId) {
                     // Add individual node (either wrapped in cluster structure or direct)
                     if (item.osmId) {
@@ -321,6 +325,8 @@ async function loadNodesForCurrentView() {
                         knooppunten.set(item.osmId, nodeData);
                         addKnooppuntToMap(nodeData);
                         addedCount++;
+                        // Add individual node to visible count
+                        visibleNodeCount++;
                     }
                 }
                 
@@ -343,7 +349,7 @@ async function loadNodesForCurrentView() {
             successMessage += ` (${data.chunks} delen samengevoegd)`;
         }
         
-        console.log(`📊 Final stats: ${addedCount} nodes added, ${knooppunten.size} total nodes, ${markers.size} markers on map`);
+        console.log(`📊 Final stats: ${addedCount} items added, ${knooppunten.size} individual nodes, ${visibleNodeCount} total visible nodes (including clusters), ${markers.size} markers on map`);
         updateStatus(successMessage, 'success');
         
         // Show warning if data might be incomplete
@@ -933,7 +939,9 @@ async function loadTotalStats() {
 // Update statistics
 function updateStats() {
     const knooppuntenCount = visitedKnooppunten.size;
-    const loadedCount = knooppunten.size;
+    const loadedCount = visibleNodeCount > 0 ? visibleNodeCount : knooppunten.size; // Use visible count including clusters
+    
+    console.log(`📊 updateStats: visited=${knooppuntenCount}, individualNodes=${knooppunten.size}, visibleNodes=${visibleNodeCount}, displayedCount=${loadedCount}`);
     
     // Use total nodes in Netherlands if available, otherwise fall back to loaded nodes
     const totalForPercentage = totalNodesInNetherlands > 0 ? totalNodesInNetherlands : loadedCount;
