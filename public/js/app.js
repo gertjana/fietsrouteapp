@@ -953,6 +953,12 @@ function updateStats() {
     const progressFill = document.getElementById('progressFill');
     const displayRate = Math.min(100, completionRate);
     progressFill.style.width = displayRate + '%';
+    progressFill.setAttribute('data-percentage', displayRate + '%');
+    progressFill.setAttribute('data-visited', knooppuntenCount);
+    progressFill.setAttribute('data-total', totalNodesInNetherlands > 0 ? totalNodesInNetherlands : loadedCount);
+    
+    // Initialize tooltip functionality
+    initializeTooltip(progressFill, knooppuntenCount, totalNodesInNetherlands > 0 ? totalNodesInNetherlands : loadedCount, displayRate);
     
     // Show total nodes info in percentage text when using Netherlands total
     if (totalNodesInNetherlands > 0) {
@@ -960,6 +966,91 @@ function updateStats() {
     } else {
         progressFill.textContent = displayRate + '%';
     }
+}
+
+// Initialize tooltip functionality for progress bar
+function initializeTooltip(progressFill, visited, total, percentage) {
+    // Remove existing tooltip if any
+    const existingTooltip = document.getElementById('progress-tooltip');
+    if (existingTooltip) {
+        existingTooltip.remove();
+    }
+    
+    // Create tooltip element
+    const tooltip = document.createElement('div');
+    tooltip.id = 'progress-tooltip';
+    tooltip.textContent = `${visited} / ${total} ${percentage}%`;
+    tooltip.style.cssText = `
+        position: fixed;
+        background: rgba(0, 0, 0, 0.9);
+        color: white;
+        padding: 8px 12px;
+        border-radius: 6px;
+        font-size: 13px;
+        font-weight: 600;
+        white-space: nowrap;
+        z-index: 10000;
+        pointer-events: none;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+        opacity: 0;
+        transition: opacity 0.2s ease;
+        display: none;
+    `;
+    
+    // Create arrow element
+    const arrow = document.createElement('div');
+    arrow.style.cssText = `
+        position: fixed;
+        width: 0;
+        height: 0;
+        border-left: 6px solid transparent;
+        border-right: 6px solid transparent;
+        border-top: 6px solid rgba(0, 0, 0, 0.9);
+        z-index: 10000;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.2s ease;
+        display: none;
+    `;
+    
+    document.body.appendChild(tooltip);
+    document.body.appendChild(arrow);
+    
+    // Get progress bar element
+    const progressBar = progressFill.parentElement;
+    
+    // Add hover event listeners
+    progressBar.addEventListener('mouseenter', (e) => {
+        const rect = progressBar.getBoundingClientRect();
+        const tooltipRect = tooltip.getBoundingClientRect();
+        
+        // Position tooltip above the progress bar
+        const tooltipTop = rect.top - tooltipRect.height - 10;
+        const tooltipLeft = rect.left + (rect.width / 2) - (tooltipRect.width / 2);
+        
+        // Position arrow below the tooltip
+        const arrowTop = rect.top - 6;
+        const arrowLeft = rect.left + (rect.width / 2) - 6;
+        
+        tooltip.style.top = tooltipTop + 'px';
+        tooltip.style.left = Math.max(10, Math.min(window.innerWidth - tooltipRect.width - 10, tooltipLeft)) + 'px';
+        tooltip.style.opacity = '1';
+        tooltip.style.display = 'block';
+        
+        arrow.style.top = arrowTop + 'px';
+        arrow.style.left = arrowLeft + 'px';
+        arrow.style.opacity = '1';
+        arrow.style.display = 'block';
+    });
+    
+    progressBar.addEventListener('mouseleave', () => {
+        tooltip.style.opacity = '0';
+        arrow.style.opacity = '0';
+        setTimeout(() => {
+            tooltip.style.display = 'none';
+            arrow.style.display = 'none';
+        }, 200);
+    });
 }
 
 // Draw route lines on map
