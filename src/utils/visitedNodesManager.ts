@@ -199,16 +199,21 @@ export class VisitedNodesManager {
 
     importData.visitedNodes.forEach(nodeData => {
       try {
+        // Normalize osmId to string — export data may contain numeric osmIds
+        const normalizedNodeData = {
+          ...nodeData,
+          osmId: String(nodeData.osmId)
+        };
         let foundOsmId: string | null = null;
         
         // Strategy 1: Try direct OSM ID match
-        if (nodeData.osmId && nodesToSearch.has(nodeData.osmId)) {
-          foundOsmId = nodeData.osmId;
+        if (normalizedNodeData.osmId && nodesToSearch.has(normalizedNodeData.osmId)) {
+          foundOsmId = normalizedNodeData.osmId;
         }
         
         // Strategy 2: Try matching by coordinates (within 100m)
-        if (!foundOsmId && nodeData.coordinates && nodeData.coordinates.length === 2) {
-          const [targetLat, targetLng] = nodeData.coordinates;
+        if (!foundOsmId && normalizedNodeData.coordinates && normalizedNodeData.coordinates.length === 2) {
+          const [targetLat, targetLng] = normalizedNodeData.coordinates;
           const threshold = 0.001; // roughly 100m
           
           for (const [osmId, node] of nodesToSearch) {
@@ -224,8 +229,8 @@ export class VisitedNodesManager {
         
         // Strategy 3: Trust the export data directly — if it has osmId and full
         // details, store it as-is without requiring a match in the current dataset.
-        if (!foundOsmId && nodeData.osmId) {
-          foundOsmId = nodeData.osmId;
+        if (!foundOsmId && normalizedNodeData.osmId) {
+          foundOsmId = normalizedNodeData.osmId;
         }
         
         if (foundOsmId) {
@@ -234,15 +239,15 @@ export class VisitedNodesManager {
           } else {
             this.visitedNodes.add(foundOsmId);
             this.visitedNodeDetails.set(foundOsmId, {
-              ...nodeData,
-              osmId: foundOsmId, // Use the matched OSM ID
+              ...normalizedNodeData,
+              osmId: foundOsmId,
               importedDate: new Date().toISOString()
             });
             successCount++;
           }
         } else {
           errorCount++;
-          notFoundNodes.push(nodeData);
+          notFoundNodes.push(normalizedNodeData);
         }
       } catch (error) {
         errorCount++;
