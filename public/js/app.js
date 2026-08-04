@@ -1261,6 +1261,13 @@ function handleImportFile(event) {
                         }
                     }
                     
+                    // Strategy 4: Trust the export data directly — accept osmId as-is
+                    // (handles case where map is not yet loaded or OSM IDs changed)
+                    if (!foundOsmId && nodeData.osmId) {
+                        foundOsmId = String(nodeData.osmId);
+                        console.log(`✅ Accepted from export data directly: node ${nodeData.knooppuntNumber} OSM ID ${foundOsmId}`);
+                    }
+                    
                     if (foundOsmId) {
                         // Check if already visited
                         if (visitedKnooppunten.has(foundOsmId)) {
