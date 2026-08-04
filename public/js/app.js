@@ -672,7 +672,7 @@ function addClusterToMap(cluster) {
     if (cluster.nodes && cluster.nodes.length > 0) {
         for (const node of cluster.nodes) {
             // ONLY match by OSM ID - knooppunt numbers are not unique!
-            if (node.osmId && visitedKnooppunten.has(node.osmId)) {
+            if (node.osmId && visitedKnooppunten.has(String(node.osmId))) {
                 hasVisitedNodes = true;
                 visitedCount++;
                 continue;
@@ -804,7 +804,7 @@ function toggleKnooppuntVisited(id) {
     const groupedNodes = findGroupedNodes(clickedNode);
     
     // Check if any of the grouped nodes are already visited
-    const anyVisited = groupedNodes.some(node => visitedKnooppunten.has(node.osmId));
+    const anyVisited = groupedNodes.some(node => visitedKnooppunten.has(String(node.osmId)));
     
     if (anyVisited) {
         // Remove all grouped nodes from visited
@@ -846,7 +846,7 @@ function updateMarkerStyle(id) {
     
     element.classList.remove('selected', 'visited');
     
-    if (visitedKnooppunten.has(id)) {
+    if (visitedKnooppunten.has(String(id))) {
         element.classList.add('visited');
     }
 }
