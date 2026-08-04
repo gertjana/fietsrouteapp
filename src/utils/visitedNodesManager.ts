@@ -222,6 +222,12 @@ export class VisitedNodesManager {
           }
         }
         
+        // Strategy 3: Trust the export data directly — if it has osmId and full
+        // details, store it as-is without requiring a match in the current dataset.
+        if (!foundOsmId && nodeData.osmId) {
+          foundOsmId = nodeData.osmId;
+        }
+        
         if (foundOsmId) {
           if (this.visitedNodes.has(foundOsmId)) {
             duplicateCount++;
