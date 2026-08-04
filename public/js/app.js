@@ -1177,13 +1177,6 @@ function handleImportFile(event) {
             console.log('Found visitedNodes array with', importData.visitedNodes.length, 'entries');
             console.log('Sample entries:', importData.visitedNodes.slice(0, 3));
             
-            // Check if we have any data loaded yet
-            if (knooppunten.size === 0) {
-                console.error('❌ No nodes loaded yet! knooppunten map is empty. Try again after the map loads.');
-                updateStatus('⚠️ Wacht tot de kaart geladen is voordat je importeert', 'error');
-                return;
-            }
-            
             // Let's analyze what node numbers we have vs what we're trying to import
             const currentNodeNumbers = new Set();
             for (const [osmId, node] of knooppunten) {
