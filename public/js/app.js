@@ -809,17 +809,17 @@ function toggleKnooppuntVisited(id) {
     if (anyVisited) {
         // Remove all grouped nodes from visited
         groupedNodes.forEach(node => {
-            visitedKnooppunten.delete(node.osmId);
-            visitedNodeDetails.delete(node.osmId); // Also remove from detailed storage
+            visitedKnooppunten.delete(String(node.osmId));
+            visitedNodeDetails.delete(String(node.osmId)); // Also remove from detailed storage
             updateMarkerStyle(node.osmId);
         });
         updateStatus(`📍 Knooppunt ${clickedNode.id} (${groupedNodes.length} nodes) gemarkeerd als niet bezocht`, 'info');
     } else {
         // Add all grouped nodes to visited
         groupedNodes.forEach(node => {
-            visitedKnooppunten.add(node.osmId);
+            visitedKnooppunten.add(String(node.osmId));
             // Store full node details for future export
-            visitedNodeDetails.set(node.osmId, {
+            visitedNodeDetails.set(String(node.osmId), {
                 knooppuntNumber: node.id,
                 name: node.name,
                 osmId: node.osmId,
@@ -902,7 +902,7 @@ function clearAllVisited() {
 function removeVisited(osmId) {
     const node = knooppunten.get(osmId);
     if (confirm(`Wil je knooppunt ${node?.id || 'dit knooppunt'} verwijderen uit bezochte lijst?`)) {
-        visitedKnooppunten.delete(osmId);
+        visitedKnooppunten.delete(String(osmId));
         
         // Update marker styling
         updateMarkerStyle(osmId);
@@ -1071,7 +1071,7 @@ function exportVisited() {
         console.log('⚠️ Found legacy visited nodes without details, attempting to populate...');
         for (const osmId of visitedKnooppunten) {
             if (!visitedNodeDetails.has(osmId)) {
-                const node = knooppunten.get(osmId);
+                const node = knooppunten.get(osmId) ?? knooppunten.get(Number(osmId));
                 if (node) {
                     visitedNodeDetails.set(osmId, {
                         knooppuntNumber: node.id,
@@ -1270,14 +1270,14 @@ function handleImportFile(event) {
                     
                     if (foundOsmId) {
                         // Check if already visited
-                        if (visitedKnooppunten.has(foundOsmId)) {
+                        if (visitedKnooppunten.has(String(foundOsmId))) {
                             duplicateCount++;
                             console.log(`⚠️ Duplicate: node ${nodeData.knooppuntNumber} already visited`);
                         } else {
-                            visitedKnooppunten.add(foundOsmId);
+                            visitedKnooppunten.add(String(foundOsmId));
                             
                             // Also add to detailed storage
-                            visitedNodeDetails.set(foundOsmId, {
+                            visitedNodeDetails.set(String(foundOsmId), {
                                 knooppuntNumber: nodeData.knooppuntNumber,
                                 name: nodeData.name,
                                 osmId: foundOsmId, // Use the matched OSM ID, not the original
@@ -1488,11 +1488,11 @@ function loadSavedData() {
         if (saved) {
             const data = JSON.parse(saved);
             
-            visitedKnooppunten = new Set(data.visitedKnooppunten || []);
+            visitedKnooppunten = new Set((data.visitedKnooppunten || []).map(String));
             
             // Load detailed node info if available (for backward compatibility)
             if (data.visitedNodeDetails) {
-                visitedNodeDetails = new Map(data.visitedNodeDetails);
+                visitedNodeDetails = new Map(data.visitedNodeDetails.map(([k, v]) => [String(k), v]));
             } else {
                 visitedNodeDetails = new Map(); // Start fresh if no detailed data
             }
